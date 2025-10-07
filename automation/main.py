@@ -42,7 +42,26 @@ def create_environment(k8s, namespace):
         namespace: Namespace name (e.g., 'pr-123')
     """
     print(f"Creating environment: {namespace}")
-    k8s.create_namespace(namespace)
+
+    if not k8s.create_namespace(namespace):
+        return
+
+    k8s.create_deployment(
+        name="nginx",
+        namespace=namespace,
+        image="nginx:latest",
+        port=80
+    )
+
+    k8s.create_service(
+        name="nginx",
+        namespace=namespace,
+        port=80,
+        target_port=80
+    )
+
+    print(f"\nEnvironment created!")
+    print(f"Access with: kubectl port-forward -n {namespace} svc/nginx 8080:80")
 
 def delete_environment(k8s, namespace):
     """
@@ -55,5 +74,5 @@ def delete_environment(k8s, namespace):
     print(f"Deleting environment: {namespace}")
     k8s.delete_namespace(namespace)
 
-if __name__ = "__main__":
+if __name__ == "__main__":
     main()

@@ -188,3 +188,39 @@ class KubernetesClient:
         except ApiException as e:
             print(f"Error creating deployment: {e}")
             return False
+
+    def create_service(self, name, namespace, port, target_port):
+        """
+        Create a service to expose a deployment.
+
+        The service routes traffic to pods with the label 'app=<name>'
+
+        Args:
+            name: Name of the service (should match deployment name for selector to work)
+            namespace: Namespace where the service will be created
+            port: Port the service listens on (external port)
+            target_port: Port on the pod to forward traffic to (container port)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        service = client.V1Service(
+            api_version="v1",
+            kind="Service",
+            metadata=client.V1ObjectMeta(name=name),
+            spec=client.V1ServiceSpec(
+                selector={"app": name},
+                ports=[client.V1ServicePort(
+                    port=port,
+                    target_port=target_port
+                )]
+            )
+        )
+
+        try:
+            self.v1.create_namespaced_service(namespace, service)
+            print(f"Created service: {name} in {namespace}")
+            return True
+        except ApiException as e:
+            print(f"Error creating service: {e}")
+            return False

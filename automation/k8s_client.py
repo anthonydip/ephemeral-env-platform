@@ -17,6 +17,7 @@ class KubernetesClient:
         # Load kubeconfig from default location (~/.kube/config)
         config.load_kube_config()
         self.v1 = client.CoreV1Api()
+        self.apps_v1 = client.AppsV1Api()
 
     @staticmethod
     def validate_namespace_name(name):
@@ -124,9 +125,11 @@ class KubernetesClient:
         """
         Check if a namespace exists.
 
-        Args: Name of the namespace to check
+        Args:
+            name: Name of the namespace to check
 
-        Returns: True if exists, False otherwise
+        Returns:
+            True if exists, False otherwise
         """
         is_valid, error_msg = self.validate_namespace_name(name)
         if not is_valid:
@@ -140,3 +143,48 @@ class KubernetesClient:
             if e.status == 404:
                 return False
             raise
+
+    def create_deployment(self, name, namespace, image, port):
+        """
+        Create a deployment with a single container.
+
+        Args:
+            name: Name of the container to deploy
+            namespace: Namespace for the container
+            image: Name of the image for the container
+            port: Number of port to expose on the pod's IP address
+
+        Returns:
+            True if successful, False otherwise
+        """
+        container = client.V1Container(
+            name=name,
+            image=image,
+            ports=[client.V1ContainerPort(container_port=port)]
+        )
+
+        template = client.V1PodTemplateSpec(
+            metadata=client.V1ObjectMeta(labels={"app": name}),
+            spec=client.V1PodSpec(containers=[container])
+        )
+
+        spec = client.V1DeploymentSpec(
+            replicas=1,
+            selector=client.V1LabelSelector(match_labels={"app": name}),
+            template=template
+        )
+
+        deployment = client.V1Deployment(
+            api_version="apps/v1",
+            kind="Deployment",
+            metadata=client.V1ObjectMeta(name=name),
+            spec=spec
+        )
+
+        try:
+            self.apps_v1.create_namespaced_deployment(namespace, deployment)
+            print(f"Created deployment: {name} in {namespace}")
+            return True
+        except ApiException as e:
+            print(f"Error creating deployment: {e}")
+            return False

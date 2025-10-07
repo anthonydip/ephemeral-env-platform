@@ -72,7 +72,11 @@ def delete_environment(k8s, namespace):
         namespace: Namespace name to delete
     """
     print(f"Deleting environment: {namespace}")
-    k8s.delete_namespace(namespace)
+
+    if not k8s.delete_namespace(namespace):
+        return
+
+    print("\nEnvironment deleted! (May take a few seconds to fully terminate)")
 
 if __name__ == "__main__":
     main()

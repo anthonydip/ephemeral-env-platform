@@ -95,7 +95,7 @@ class KubernetesClient:
             print(f"Deleted namespace: {name}")
             return True
         except ApiException as e:
-            if e.status == 409:
+            if e.status == 404:
                 print(f"Namespace {name} not found")
             else:
                 print(f"Error deleting namespace: {e}")

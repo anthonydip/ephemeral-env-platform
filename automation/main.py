@@ -2,9 +2,9 @@
 Main automation script for ephemeral environments.
 
 Creates and destroys Kubernetes namespaces for PR preview environments.
-Run with: python main.py <create|delete> <pr-number>
 """
 import sys
+import argparse
 from k8s_client import KubernetesClient
 from config_parser import load_config
 
@@ -15,37 +15,47 @@ def main():
     Parsese command line arguments and delegates to appropriate handler.
     Exits with code 1 on invalid input.
     """
-    if len(sys.argv) < 3:
-        print("Usage: python main.py <create|delete> <pr-number>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Manage ephemeral preview environments"
+    )
+    parser.add_argument(
+        "action",
+        choices=["create", "delete"],
+        help="Action to perform"
+    )
+    parser.add_argument(
+        "pr_number",
+        help="Pull request number"
+    )
+    parser.add_argument(
+        "--config",
+        default=".ephemeral-config.yml",
+        help="Path to config file (default: .ephemeral-config.yml)"
+    )
 
-    action = sys.argv[1]
-    pr_number = sys.argv[2]
-    namespace = f"pr-{pr_number}"
+    args = parser.parse_args()
 
+    namespace = f"pr-{args.pr_number}"
     k8s = KubernetesClient()
 
-    match action:
-        case "create":
-            create_environment(k8s, namespace)
-        case "delete":
-            delete_environment(k8s, namespace)
-        case _:
-            print(f"Unknown action: {action}")
-            sys.exit(1)
+    if args.action == "create":
+        create_environment(k8s, namespace, args.config)
+    elif args.action == "delete":
+        delete_environment(k8s, namespace)
 
-def create_environment(k8s, namespace):
+def create_environment(k8s, namespace, config_path):
     """
     Create a new ephemeral environment.
 
     Args:
         k8s: KubernetesClient instance
         namespace: Namespace name (e.g., 'pr-123')
+        config_path: Path to configuration file
     """
     print(f"Creating environment: {namespace}")
 
     # Load YAML configuration file
-    config = load_config("examples/.ephemeral-config.yml")
+    config = load_config(config_path)
     if not config:
         return
 

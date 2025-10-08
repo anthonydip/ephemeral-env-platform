@@ -3,6 +3,7 @@ kubeconfig*
 *.key
 *.pem
 .env
+.ephemeral-config.yml
 
 # Python
 __pycache__/

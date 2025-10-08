@@ -29,8 +29,8 @@ def main():
     )
     parser.add_argument(
         "--config",
-        default=".ephemeral-config.yml",
-        help="Path to config file (default: .ephemeral-config.yml)"
+        default=".ephemeral-config.yaml",
+        help="Path to config file (default: .ephemeral-config.yaml)"
     )
 
     args = parser.parse_args()

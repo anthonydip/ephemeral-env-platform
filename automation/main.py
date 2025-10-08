@@ -46,22 +46,55 @@ def create_environment(k8s, namespace):
     if not k8s.create_namespace(namespace):
         return
 
+    # Frontend deployment
     k8s.create_deployment(
-        name="nginx",
+        name="frontend",
         namespace=namespace,
         image="nginx:latest",
         port=80
     )
 
+    # Backend deployment
+    k8s.create_deployment(
+        name="backend",
+        namespace=namespace,
+        image="node:alpine",
+        port=3000
+    )
+
+    # Database deployment
+    k8s.create_deployment(
+        name="database",
+        namespace=namespace,
+        image="postgres:15",
+        port=5432
+    )
+
     k8s.create_service(
-        name="nginx",
+        name="frontend",
         namespace=namespace,
         port=80,
         target_port=80
     )
 
+    k8s.create_service(
+        name="backend",
+        namespace=namespace,
+        port=3000,
+        target_port=3000
+    )
+
+    k8s.create_service(
+        name="database",
+        namespace=namespace,
+        port=5432,
+        target_port=5432
+    )
+
     print(f"\nEnvironment created!")
-    print(f"Access with: kubectl port-forward -n {namespace} svc/nginx 8080:80")
+    print(f"Access with frontend: kubectl port-forward -n {namespace} svc/frontend 8080:80")
+    print(f"Access with backend: kubectl port-forward -n {namespace} svc/backend 3001:3000")
+    print(f"Access with database: kubectl port-forward -n {namespace} svc/database 5433:5432")
 
 def delete_environment(k8s, namespace):
     """

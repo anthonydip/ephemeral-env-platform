@@ -6,6 +6,7 @@ Run with: python main.py <create|delete> <pr-number>
 """
 import sys
 from k8s_client import KubernetesClient
+from config_parser import load_config
 
 def main():
     """
@@ -43,58 +44,35 @@ def create_environment(k8s, namespace):
     """
     print(f"Creating environment: {namespace}")
 
+    # Load YAML configuration file
+    config = load_config("examples/.ephemeral-config.yml")
+    if not config:
+        return
+
+    # Create namespace
     if not k8s.create_namespace(namespace):
         return
 
-    # Frontend deployment
-    k8s.create_deployment(
-        name="frontend",
-        namespace=namespace,
-        image="nginx:latest",
-        port=80
-    )
+    # Create services and deployments
+    for service in config['services']:
+        k8s.create_deployment(
+            name=service['name'],
+            namespace=namespace,
+            image=service['image'],
+            port=service['port']
+        )
 
-    # Backend deployment
-    k8s.create_deployment(
-        name="backend",
-        namespace=namespace,
-        image="node:alpine",
-        port=3000
-    )
-
-    # Database deployment
-    k8s.create_deployment(
-        name="database",
-        namespace=namespace,
-        image="postgres:15",
-        port=5432
-    )
-
-    k8s.create_service(
-        name="frontend",
-        namespace=namespace,
-        port=80,
-        target_port=80
-    )
-
-    k8s.create_service(
-        name="backend",
-        namespace=namespace,
-        port=3000,
-        target_port=3000
-    )
-
-    k8s.create_service(
-        name="database",
-        namespace=namespace,
-        port=5432,
-        target_port=5432
-    )
+        k8s.create_service(
+            name=service['name'],
+            namespace=namespace,
+            port=service['port'],
+            target_port=service['port']
+        )
 
     print(f"\nEnvironment created!")
-    print(f"Access with frontend: kubectl port-forward -n {namespace} svc/frontend 8080:80")
-    print(f"Access with backend: kubectl port-forward -n {namespace} svc/backend 3001:3000")
-    print(f"Access with database: kubectl port-forward -n {namespace} svc/database 5433:5432")
+    for service in config['services']:
+        local_port = service['port'] + 1000
+        print(f"    kubectl port-forward -n {namespace} svc/{service['name']} {local_port}:{service['port']}")
 
 def delete_environment(k8s, namespace):
     """

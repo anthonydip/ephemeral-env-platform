@@ -2,10 +2,11 @@
 Main automation script for ephemeral environments.
 
 Creates and destroys Kubernetes namespaces for PR preview environments.
-Run with: python main.py <create|delete> <pr-number>
 """
 import sys
+import argparse
 from k8s_client import KubernetesClient
+from config_parser import load_config
 
 def main():
     """
@@ -14,87 +15,74 @@ def main():
     Parsese command line arguments and delegates to appropriate handler.
     Exits with code 1 on invalid input.
     """
-    if len(sys.argv) < 3:
-        print("Usage: python main.py <create|delete> <pr-number>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Manage ephemeral preview environments"
+    )
+    parser.add_argument(
+        "action",
+        choices=["create", "delete"],
+        help="Action to perform"
+    )
+    parser.add_argument(
+        "pr_number",
+        help="Pull request number"
+    )
+    parser.add_argument(
+        "--config",
+        default=".ephemeral-config.yml",
+        help="Path to config file (default: .ephemeral-config.yml)"
+    )
 
-    action = sys.argv[1]
-    pr_number = sys.argv[2]
-    namespace = f"pr-{pr_number}"
+    args = parser.parse_args()
 
+    namespace = f"pr-{args.pr_number}"
     k8s = KubernetesClient()
 
-    match action:
-        case "create":
-            create_environment(k8s, namespace)
-        case "delete":
-            delete_environment(k8s, namespace)
-        case _:
-            print(f"Unknown action: {action}")
-            sys.exit(1)
+    if args.action == "create":
+        create_environment(k8s, namespace, args.config)
+    elif args.action == "delete":
+        delete_environment(k8s, namespace)
 
-def create_environment(k8s, namespace):
+def create_environment(k8s, namespace, config_path):
     """
     Create a new ephemeral environment.
 
     Args:
         k8s: KubernetesClient instance
         namespace: Namespace name (e.g., 'pr-123')
+        config_path: Path to configuration file
     """
     print(f"Creating environment: {namespace}")
 
+    # Load YAML configuration file
+    config = load_config(config_path)
+    if not config:
+        return
+
+    # Create namespace
     if not k8s.create_namespace(namespace):
         return
 
-    # Frontend deployment
-    k8s.create_deployment(
-        name="frontend",
-        namespace=namespace,
-        image="nginx:latest",
-        port=80
-    )
+    # Create services and deployments
+    for service in config['services']:
+        k8s.create_deployment(
+            name=service['name'],
+            namespace=namespace,
+            image=service['image'],
+            port=service['port']
+        )
 
-    # Backend deployment
-    k8s.create_deployment(
-        name="backend",
-        namespace=namespace,
-        image="node:alpine",
-        port=3000
-    )
-
-    # Database deployment
-    k8s.create_deployment(
-        name="database",
-        namespace=namespace,
-        image="postgres:15",
-        port=5432
-    )
-
-    k8s.create_service(
-        name="frontend",
-        namespace=namespace,
-        port=80,
-        target_port=80
-    )
-
-    k8s.create_service(
-        name="backend",
-        namespace=namespace,
-        port=3000,
-        target_port=3000
-    )
-
-    k8s.create_service(
-        name="database",
-        namespace=namespace,
-        port=5432,
-        target_port=5432
-    )
+        k8s.create_service(
+            name=service['name'],
+            namespace=namespace,
+            port=service['port'],
+            target_port=service['port']
+        )
 
     print(f"\nEnvironment created!")
-    print(f"Access with frontend: kubectl port-forward -n {namespace} svc/frontend 8080:80")
-    print(f"Access with backend: kubectl port-forward -n {namespace} svc/backend 3001:3000")
-    print(f"Access with database: kubectl port-forward -n {namespace} svc/database 5433:5432")
+    for service in config['services']:
+        local_port = service['port'] + 1000
+        print(f"    kubectl port-forward -n {namespace} svc/{service['name']} {local_port}:{service['port']}")
 
 def delete_environment(k8s, namespace):
     """

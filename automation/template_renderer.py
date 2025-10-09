@@ -1,19 +1,20 @@
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound, TemplateSyntaxError, UndefinedError
 
-def render_template(template_path, data):
+def render_template(template_name, data, template_dir="templates/"):
     """
     Render Jinja2 template with provided data.
 
     Args:
-        template_path: Path to the Jinja2 template file
+        template_name: Name of template file (e.g., 'deployment.yaml.j2')
         data: Dictionary containing data from parsed configuration file
+        template_dir: Directory containing templates (default: templates/)
 
     Returns:
         str: Rendered YAML content, or None if rendering failed
     """
     try:
-        environment = Environment(loader=FileSystemLoader("templates/"))
-        template = environment.get_template(template_path)
+        environment = Environment(loader=FileSystemLoader(template_dir))
+        template = environment.get_template(template_name)
         rendered_yaml = template.render(data)
         return rendered_yaml
     

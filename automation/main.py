@@ -32,6 +32,11 @@ def main():
         default=".ephemeral-config.yaml",
         help="Path to config file (default: .ephemeral-config.yaml)"
     )
+    parser.add_argument(
+        "--templates",
+        default="templates/",
+        help="Path to templates directory (default: templates/)"
+    )
 
     args = parser.parse_args()
 
@@ -39,11 +44,11 @@ def main():
     k8s = KubernetesClient()
 
     if args.action == "create":
-        create_environment(k8s, namespace, args.config)
+        create_environment(k8s, namespace, args.config, args.templates)
     elif args.action == "delete":
         delete_environment(k8s, namespace)
 
-def create_environment(k8s, namespace, config_path):
+def create_environment(k8s, namespace, config_path, template_dir):
     """
     Create a new ephemeral environment.
 
@@ -51,6 +56,7 @@ def create_environment(k8s, namespace, config_path):
         k8s: KubernetesClient instance
         namespace: Namespace name (e.g., 'pr-123')
         config_path: Path to configuration file
+        template_dir: Path to templates directory
     """
     print(f"Creating environment: {namespace}")
 

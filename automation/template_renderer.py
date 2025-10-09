@@ -15,22 +15,21 @@ def render_template(template_name, data, template_dir="templates/"):
     try:
         environment = Environment(loader=FileSystemLoader(template_dir))
         template = environment.get_template(template_name)
-        rendered_yaml = template.render(data)
-        return rendered_yaml
+        return template.render(data)
     
     except TemplateNotFound:
-        print(f"Template '{template_path}' not found in templates/")
+        print(f"Template '{template_name}' not found in {template_dir}")
         return None
 
     except TemplateSyntaxError as e:
-        print(f"Invalid template syntax in '{template_path}'")
+        print(f"Invalid template syntax in '{template_name}'")
         return None
 
     except UndefinedError as e:
-        print(f"Missing required variable in template '{template_path}'")
+        print(f"Missing required variable in template '{template_name}'")
         return None
 
     except Exception as e:
-        print(f"Unexpected error rendering template '{template_path}'")
+        print(f"Unexpected error rendering template '{template_name}'")
         print(f"Details: {e}")
         return None

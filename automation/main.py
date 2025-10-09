@@ -75,14 +75,17 @@ def create_environment(k8s, namespace, config_path, template_dir):
             name=service['name'],
             namespace=namespace,
             image=service['image'],
-            port=service['port']
+            port=service['port'],
+            template_dir=template_dir,
+            env_vars=service.get('env')
         )
 
         k8s.create_service(
             name=service['name'],
             namespace=namespace,
             port=service['port'],
-            target_port=service['port']
+            target_port=service['port'],
+            template_dir=template_dir
         )
 
     print(f"\nEnvironment created!")

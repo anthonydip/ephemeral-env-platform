@@ -2,7 +2,9 @@
 Kubernetes client wrapper for namespace management.
 """
 import re
-from kubernetes import client, config
+from yaml import safe_load
+from template_renderer import render_template
+from kubernetes import client, config, utils
 from kubernetes.client.rest import ApiException
 
 class KubernetesClient:
@@ -122,6 +124,42 @@ class KubernetesClient:
 
         return True, None
 
+    def _apply_yaml(self, yaml_content, namespace):
+        """
+        Apply YAML manifest to Kubernetes cluster.
+
+        Args:
+            yaml_content: YAML string to apply
+            namespace: Namespace to apply resources to
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            manifest = safe_load(yaml_content)
+
+            # Ensure namespace is set in metadata
+            if 'metadata' not in manifest:
+                manifest['metadata'] = {}
+            manifest['metadata']['namespace'] = namespace
+
+            utils.create_from_dict(
+                self.v1.api_client,
+                manifest
+            )
+
+            kind = manifest.get('kind', 'Resource')
+            name = manifest.get('metadata', {}).get('name', 'unknown')
+            print(f"Applied {kind}: {name} in {namespace}")
+            return True
+
+        except ApiException as e:
+            print("Error applying YAML to Kubernetes")
+            return False
+        except Exception as e:
+            print("Error parsing or applying YAML")
+            return False
+
     def create_namespace(self, name):
         """
         Create a namespace.
@@ -220,15 +258,17 @@ class KubernetesClient:
                 return False
             raise
 
-    def create_deployment(self, name, namespace, image, port):
+    def create_deployment(self, name, namespace, image, port, template_dir, env_vars=None):
         """
-        Create a deployment with a single container.
+        Create a deployment using templates.
 
         Args:
             name: Name of the container to deploy
             namespace: Namespace for the container
             image: Name of the image for the container
-            port: Number of port to expose on the pod's IP address
+            port: Port to expose on the pod's IP address
+            env_vars: Optional dict of environment variables
+            template_dir: Directory containing templates (default: templates/)
 
         Returns:
             True if successful, False otherwise
@@ -253,41 +293,23 @@ class KubernetesClient:
             print(error_msg)
             return False
 
-        container = client.V1Container(
-            name=name,
-            image=image,
-            ports=[client.V1ContainerPort(container_port=port)]
-        )
+        data = {
+            'name': name,
+            'namespace': namespace,
+            'image': image,
+            'port': port,
+            'env_vars': env_vars
+        }
 
-        template = client.V1PodTemplateSpec(
-            metadata=client.V1ObjectMeta(labels={"app": name}),
-            spec=client.V1PodSpec(containers=[container])
-        )
-
-        spec = client.V1DeploymentSpec(
-            replicas=1,
-            selector=client.V1LabelSelector(match_labels={"app": name}),
-            template=template
-        )
-
-        deployment = client.V1Deployment(
-            api_version="apps/v1",
-            kind="Deployment",
-            metadata=client.V1ObjectMeta(name=name),
-            spec=spec
-        )
-
-        try:
-            self.apps_v1.create_namespaced_deployment(namespace, deployment)
-            print(f"Created deployment: {name} in {namespace}")
-            return True
-        except ApiException as e:
-            print(f"Error creating deployment: {e}")
+        yaml_content = render_template('deployment.yaml.j2', data, template_dir)
+        if not yaml_content:
             return False
 
-    def create_service(self, name, namespace, port, target_port):
+        return self._apply_yaml(yaml_content, namespace)
+
+    def create_service(self, name, namespace, port, target_port, template_dir):
         """
-        Create a service to expose a deployment.
+        Create a service using templates.
 
         The service routes traffic to pods with the label 'app=<name>'
 
@@ -296,6 +318,7 @@ class KubernetesClient:
             namespace: Namespace where the service will be created
             port: Port the service listens on (external port)
             target_port: Port on the pod to forward traffic to (container port)
+            template_dir: Directory containing templates (default: templates/)
 
         Returns:
             True if successful, False otherwise
@@ -320,23 +343,16 @@ class KubernetesClient:
             print(f"Invalid target port: {error_msg}")
             return False
 
-        service = client.V1Service(
-            api_version="v1",
-            kind="Service",
-            metadata=client.V1ObjectMeta(name=name),
-            spec=client.V1ServiceSpec(
-                selector={"app": name},
-                ports=[client.V1ServicePort(
-                    port=port,
-                    target_port=target_port
-                )]
-            )
-        )
+        data = {
+            'name': name,
+            'namespace': namespace,
+            'port': port,
+            'target_port': target_port
+        }
 
-        try:
-            self.v1.create_namespaced_service(namespace, service)
-            print(f"Created service: {name} in {namespace}")
-            return True
-        except ApiException as e:
-            print(f"Error creating service: {e}")
+        yaml_content = render_template('service.yaml.j2', data, template_dir)
+        if not yaml_content:
             return False
+
+        return self._apply_yaml(yaml_content, namespace)
+

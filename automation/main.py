@@ -29,8 +29,13 @@ def main():
     )
     parser.add_argument(
         "--config",
-        default=".ephemeral-config.yml",
-        help="Path to config file (default: .ephemeral-config.yml)"
+        default=".ephemeral-config.yaml",
+        help="Path to config file (default: .ephemeral-config.yaml)"
+    )
+    parser.add_argument(
+        "--templates",
+        default="templates/",
+        help="Path to templates directory (default: templates/)"
     )
 
     args = parser.parse_args()
@@ -39,11 +44,11 @@ def main():
     k8s = KubernetesClient()
 
     if args.action == "create":
-        create_environment(k8s, namespace, args.config)
+        create_environment(k8s, namespace, args.config, args.templates)
     elif args.action == "delete":
         delete_environment(k8s, namespace)
 
-def create_environment(k8s, namespace, config_path):
+def create_environment(k8s, namespace, config_path, template_dir):
     """
     Create a new ephemeral environment.
 
@@ -51,6 +56,7 @@ def create_environment(k8s, namespace, config_path):
         k8s: KubernetesClient instance
         namespace: Namespace name (e.g., 'pr-123')
         config_path: Path to configuration file
+        template_dir: Path to templates directory
     """
     print(f"Creating environment: {namespace}")
 
@@ -69,14 +75,17 @@ def create_environment(k8s, namespace, config_path):
             name=service['name'],
             namespace=namespace,
             image=service['image'],
-            port=service['port']
+            port=service['port'],
+            template_dir=template_dir,
+            env_vars=service.get('env')
         )
 
         k8s.create_service(
             name=service['name'],
             namespace=namespace,
             port=service['port'],
-            target_port=service['port']
+            target_port=service['port'],
+            template_dir=template_dir
         )
 
     print(f"\nEnvironment created!")

@@ -5,8 +5,8 @@ Creates and destroys Kubernetes namespaces for PR preview environments.
 """
 import sys
 import argparse
-from k8s_client import KubernetesClient
-from config_parser import load_config
+from automation.k8s_client import KubernetesClient
+from automation.config_parser import load_config
 
 def main():
     """

@@ -3,7 +3,7 @@ Kubernetes client wrapper for namespace management.
 """
 import re
 from yaml import safe_load
-from template_renderer import render_template
+from automation.template_renderer import render_template
 from kubernetes import client, config, utils
 from kubernetes.client.rest import ApiException
 

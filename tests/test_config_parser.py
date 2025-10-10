@@ -6,7 +6,7 @@ from automation.config_parser import load_config
 
 def test_load_config_with_env_vars():
     """Test that config with env loads successfully."""
-    config = load_config("tests/fixtures/config_with_env.yaml")
+    config = load_config("tests/fixtures/config_parser/config_with_env.yaml")
 
     assert config is not None
     assert 'services' in config
@@ -20,7 +20,7 @@ def test_load_config_with_env_vars():
 
 def test_load_config_without_env_vars():
     """Test that config without env loads successfully."""
-    config = load_config("tests/fixtures/config_without_env.yaml")
+    config = load_config("tests/fixtures/config_parser/config_without_env.yaml")
 
     assert config is not None
     assert 'services' in config
@@ -28,30 +28,30 @@ def test_load_config_without_env_vars():
 
 def test_load_nonexistent_file():
     """Test that loading a missing file returns None."""
-    config = load_config("nonexistent.yaml")
+    config = load_config("tests/fixtures/config_parser/nonexistent.yaml")
     assert config is None
 
 def test_load_invalid_yaml_syntax():
     """Test that malformed YAML is handled gracefully."""
-    config = load_config("invalid_yaml.yaml")
+    config = load_config("tests/fixtures/config_parser/invalid_yaml.yaml")
     assert config is None
 
 def test_load_config_without_services_key():
     """Test that service without 'services' key is rejected."""
-    config = load_config("missing_service.yaml")
+    config = load_config("tests/fixtures/config_parser/missing_service.yaml")
     assert config is None
 
 def test_load_config_without_name():
     """Test that service without 'name' field is rejected."""
-    config = load_config("service_missing_name.yaml")
+    config = load_config("tests/fixtures/config_parser/service_missing_name.yaml")
     assert config is None
 
 def test_load_config_without_image():
     """Test that service without 'image' field is rejected."""
-    config = load_config("service_missing_image.yaml")
+    config = load_config("tests/fixtures/config_parser/service_missing_image.yaml")
     assert config is None
 
 def test_load_config_without_port():
     """Test that service without 'port' field is rejected."""
-    config = load_config("service_missing_port.yaml")
+    config = load_config("tests/fixtures/config_parser/service_missing_port.yaml")
     assert config is None

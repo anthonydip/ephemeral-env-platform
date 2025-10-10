@@ -1,4 +1,4 @@
-from jinja2 import Environment, FileSystemLoader, TemplateNotFound, TemplateSyntaxError, UndefinedError
+from jinja2 import Environment, FileSystemLoader, TemplateNotFound, TemplateSyntaxError, UndefinedError, StrictUndefined
 
 def render_template(template_name, data, template_dir="templates/"):
     """
@@ -13,7 +13,7 @@ def render_template(template_name, data, template_dir="templates/"):
         str: Rendered YAML content, or None if rendering failed
     """
     try:
-        environment = Environment(loader=FileSystemLoader(template_dir))
+        environment = Environment(loader=FileSystemLoader(template_dir), undefined=StrictUndefined)
         template = environment.get_template(template_name)
         return template.render(data)
     

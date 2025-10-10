@@ -328,7 +328,7 @@ class KubernetesClient:
             print(error_msg)
             return False
 
-        is_valid, error_msg = self._validate_k8s_name(name, "namespace")
+        is_valid, error_msg = self._validate_k8s_name(namespace, "namespace")
         if not is_valid:
             print(error_msg)
             return False

@@ -7,7 +7,7 @@ def render_template(template_name, data, template_dir="automation/templates/"):
     Args:
         template_name: Name of template file (e.g., 'deployment.yaml.j2')
         data: Dictionary containing data from parsed configuration file
-        template_dir: Directory containing templates (default: templates/)
+        template_dir: Directory containing templates (default: automation/templates/)
 
     Returns:
         str: Rendered YAML content, or None if rendering failed

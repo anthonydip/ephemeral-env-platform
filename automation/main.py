@@ -12,7 +12,7 @@ def main():
     """
     CLI entry point for ephemeral environment management.
 
-    Parsese command line arguments and delegates to appropriate handler.
+    Parses command line arguments and delegates to appropriate handler.
     Exits with code 1 on invalid input.
     """
     parser = argparse.ArgumentParser(

@@ -1,0 +1,4 @@
+services
+  - name: frontend
+    image: nginx:latest
+    port: 80

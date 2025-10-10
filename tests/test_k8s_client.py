@@ -23,7 +23,7 @@ def test_validate_k8s_name_valid(mock_k8s_client):
     name = "my-app"
     is_valid, error = mock_k8s_client._validate_k8s_name(name, "deployment")
 
-    assert is_valid == True
+    assert is_valid
     assert error is None
 
 def test_validate_k8s_name_too_long(mock_k8s_client):
@@ -32,7 +32,7 @@ def test_validate_k8s_name_too_long(mock_k8s_client):
 
     is_valid, error = mock_k8s_client._validate_k8s_name(name, "deployment")
 
-    assert is_valid == False
+    assert not is_valid
     assert "too long" in error
     assert "64" in error
 
@@ -43,7 +43,7 @@ def test_validate_k8s_name_invalid_characters(mock_k8s_client):
 
     is_valid, error = mock_k8s_client._validate_k8s_name(name, "deployment")
 
-    assert is_valid == False
+    assert not is_valid
     assert "invalid deployment name" in error.lower()
 
 def test_validate_k8s_name_empty(mock_k8s_client):
@@ -52,7 +52,7 @@ def test_validate_k8s_name_empty(mock_k8s_client):
 
     is_valid, error = mock_k8s_client._validate_k8s_name(name, "deployment")
 
-    assert is_valid == False
+    assert not is_valid
     assert "cannot be empty" in error
 
 def test_validate_port_valid(mock_k8s_client):
@@ -61,7 +61,7 @@ def test_validate_port_valid(mock_k8s_client):
 
     is_valid, error = mock_k8s_client._validate_port(port)
 
-    assert is_valid == True
+    assert is_valid
     assert error is None
 
 def test_validate_port_too_large(mock_k8s_client):
@@ -70,7 +70,7 @@ def test_validate_port_too_large(mock_k8s_client):
 
     is_valid, error = mock_k8s_client._validate_port(port)
 
-    assert is_valid == False
+    assert not is_valid
     assert "65536" in error
 
 def test_validate_port_negative(mock_k8s_client):
@@ -79,7 +79,7 @@ def test_validate_port_negative(mock_k8s_client):
 
     is_valid, error = mock_k8s_client._validate_port(port)
 
-    assert is_valid == False
+    assert not is_valid
     assert "-1" in error
 
 def test_validate_port_not_integer(mock_k8s_client):
@@ -88,7 +88,7 @@ def test_validate_port_not_integer(mock_k8s_client):
 
     is_valid, error = mock_k8s_client._validate_port(port)
 
-    assert is_valid == False
+    assert not is_valid
     assert "integer" in error.lower()
 
 def test_validate_image_name_valid(mock_k8s_client):
@@ -97,7 +97,7 @@ def test_validate_image_name_valid(mock_k8s_client):
 
     is_valid, error = mock_k8s_client._validate_image_name(image)
 
-    assert is_valid == True
+    assert is_valid
     assert error is None
 
 def test_validate_image_name_with_registry(mock_k8s_client):
@@ -106,7 +106,7 @@ def test_validate_image_name_with_registry(mock_k8s_client):
 
     is_valid, error = mock_k8s_client._validate_image_name(image)
 
-    assert is_valid == True
+    assert is_valid
     assert error is None
 
 def test_validate_image_name_without_tag(mock_k8s_client):
@@ -115,7 +115,7 @@ def test_validate_image_name_without_tag(mock_k8s_client):
 
     is_valid, error = mock_k8s_client._validate_image_name(image)
 
-    assert is_valid == False
+    assert not is_valid
     assert "must include a tag" in error
 
 def test_validate_image_name_empty(mock_k8s_client):
@@ -124,7 +124,7 @@ def test_validate_image_name_empty(mock_k8s_client):
 
     is_valid, error = mock_k8s_client._validate_image_name(image)
 
-    assert is_valid == False
+    assert not is_valid
     assert "cannot be empty" in error
 
 def test_validate_image_name_invalid_tag_format(mock_k8s_client):
@@ -133,7 +133,7 @@ def test_validate_image_name_invalid_tag_format(mock_k8s_client):
 
     is_valid, error = mock_k8s_client._validate_image_name(image)
 
-    assert is_valid == False
+    assert not is_valid
     assert "tag format" in error.lower()
 
 def test_validate_image_name_invalid_repo_format(mock_k8s_client):
@@ -142,7 +142,7 @@ def test_validate_image_name_invalid_repo_format(mock_k8s_client):
 
     is_valid, error = mock_k8s_client._validate_image_name(image)
 
-    assert is_valid == False
+    assert not is_valid
     assert "invalid repository name format" in error.lower()
 
 def test_validate_image_name_invalid_image_format(mock_k8s_client):
@@ -151,7 +151,7 @@ def test_validate_image_name_invalid_image_format(mock_k8s_client):
 
     is_valid, error = mock_k8s_client._validate_image_name(image)
 
-    assert is_valid == False
+    assert not is_valid
     assert "invalid image name format" in error.lower()
 
 def test_validate_image_name_too_long(mock_k8s_client):
@@ -161,5 +161,5 @@ def test_validate_image_name_too_long(mock_k8s_client):
 
     is_valid, error = mock_k8s_client._validate_image_name(image)
 
-    assert is_valid == False
+    assert not is_valid
     assert "image reference" in error.lower()

@@ -1,0 +1,126 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ephemeral-env-platform"
+version = "0.1.0"
+description = "Automated ephemeral preview environments for pull requests using Kubernetes"
+authors = [
+  {name = "Anthony Dip", email = "anthonydip2001@gmail.com"}
+]
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.9"
+keywords = ["kubernetes", "devops", "ci-cd", "preview-environments", "platform-engineering"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Software Development :: Build Tools",
+]
+
+dependencies = [
+  "kubernetes>=34.0.0",
+  "Jinja2>=3.1.0",
+  "PyYAML>=6.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+  "pytest-cov>=4.0.0",
+  "pytest-mock>=3.12.0",
+  "black>=24.0.0",
+  "ruff>=0.5.0",
+  "pre-commit>=3.0.0",
+]
+
+[project.scripts]
+ephemeral = "automation.main:main"
+
+[project.urls]
+Homepage = "https://github.com/anthonydip/ephemeral-env-platform"
+Repository = "https://github.com/anthonydip/ephemeral-env-platform"
+Issues = "https://github.com/anthonydip/ephemeral-env-platform/issues"
+
+[tool.setuptools]
+packages = ["automation"]
+
+[tool.setuptools.package-data]
+automation = ["templates/*.j2"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+  "integration: marks tests as integration tests (require running K8s cluster)",
+]
+addopts = [
+  "--strict-markers",
+  "--cov=automation",
+  "--cov-report=term-missing",
+  "--cov-report=html",
+  "--cov-fail-under=80",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py39', 'py310', 'py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+# directories
+\.eggs
+| \.git
+| \.hg
+| \.mypy_cache
+| \.tox
+| \.venv
+| build
+| dist
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
+  "F",   # pyflakes
+  "I",   # isort
+  "N",   # pep8-naming
+  "UP",  # pyupgrade
+  "B",   # flake8-bugbear
+  "C4",  # flake8-comprehensions
+  "SIM", # flake8-simplify
+]
+ignore = [
+  "E501",  # line too long (handled by black)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # Allow unused imports in __init__.py
+"tests/*" = ["S101"]       # Allow assert statements in tests
+
+[tool.coverage.run]
+source = ["automation"]
+omit = [
+  "*/tests/*",
+  "*/venv/*",
+  "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false

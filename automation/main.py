@@ -34,8 +34,8 @@ def main():
     )
     parser.add_argument(
         "--templates",
-        default="templates/",
-        help="Path to templates directory (default: templates/)"
+        default="automation/templates/",
+        help="Path to templates directory (default: automation/templates/)"
     )
 
     args = parser.parse_args()

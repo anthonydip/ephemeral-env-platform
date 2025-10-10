@@ -70,7 +70,7 @@ def test_create_deployment_without_env(k8s_client, test_namespace):
         namespace=test_namespace,
         image="nginx:latest",
         port=80,
-        template_dir="templates/",
+        template_dir="automation/templates/",
         env_vars=None
     )
 
@@ -89,7 +89,7 @@ def test_create_deployment_with_env_vars(k8s_client, test_namespace):
         namespace=test_namespace,
         image="postgres:15",
         port=5432,
-        template_dir="templates/",
+        template_dir="automation/templates/",
         env_vars={
             'POSTGRES_PASSWORD': 'testpassword',
             'POSTGRES_USER': 'testuser'
@@ -117,7 +117,7 @@ def test_create_service(k8s_client, test_namespace):
         namespace=test_namespace,
         port=80,
         target_port=80,
-        template_dir="templates/"
+        template_dir="automation/templates/"
     )
 
     assert result
@@ -139,7 +139,7 @@ def test_full_environment_creation(k8s_client, test_namespace):
         namespace=test_namespace,
         image="nginx:latest",
         port=80,
-        template_dir="templates/",
+        template_dir="automation/templates/",
         env_vars=None
     )
 
@@ -148,7 +148,7 @@ def test_full_environment_creation(k8s_client, test_namespace):
         namespace=test_namespace,
         port=80,
         target_port=80,
-        template_dir="templates/"
+        template_dir="automation/templates/"
     )
 
     assert k8s_client.namespace_exists(test_namespace)

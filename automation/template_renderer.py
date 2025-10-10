@@ -1,6 +1,6 @@
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound, TemplateSyntaxError, UndefinedError, StrictUndefined
 
-def render_template(template_name, data, template_dir="templates/"):
+def render_template(template_name, data, template_dir="automation/templates/"):
     """
     Render Jinja2 template with provided data.
 

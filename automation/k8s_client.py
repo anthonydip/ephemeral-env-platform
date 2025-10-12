@@ -1,11 +1,15 @@
 """
 Kubernetes client wrapper for namespace management.
 """
+
 import re
-from yaml import safe_load
-from automation.template_renderer import render_template
+
 from kubernetes import client, config, utils
 from kubernetes.client.rest import ApiException
+from yaml import safe_load
+
+from automation.template_renderer import render_template
+
 
 class KubernetesClient:
     """
@@ -21,7 +25,9 @@ class KubernetesClient:
         self.v1 = client.CoreV1Api()
         self.apps_v1 = client.AppsV1Api()
 
-    def _validate_k8s_name(self, name, resource_type="resource"):
+    def _validate_k8s_name(
+        self, name: str, resource_type: str = "resource"
+    ) -> tuple[bool, str | None]:
         """
         Validate Kubernetes resource name (works for namespaces, deployments, services, etc.)
 
@@ -36,10 +42,13 @@ class KubernetesClient:
             return False, f"{resource_type.capitalize()} name cannot be empty"
 
         if len(name) > 63:
-            return False, f"{resource_type.capitalize()} name too long (max 63 chars, got {len(name)})"
+            return (
+                False,
+                f"{resource_type.capitalize()} name too long (max 63 chars, got {len(name)})",
+            )
 
         # Lowercase alphanumeric + hyphens, start/end with alphanumeric
-        pattern = r'^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+        pattern = r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
         if not re.match(pattern, name):
             return False, (
                 f"Invalid {resource_type} name. Must be lowercase letters, numbers, "
@@ -48,7 +57,7 @@ class KubernetesClient:
 
         return True, None
 
-    def _validate_image_name(self, image):
+    def _validate_image_name(self, image: str) -> tuple[bool, str | None]:
         """
         Validate Docker image format according to OCI specification.
 
@@ -66,27 +75,27 @@ class KubernetesClient:
         if not image:
             return False, "Image name cannot be empty"
 
-        if ':' not in image:
+        if ":" not in image:
             return False, "Image must include a tag (e.g., 'nginx:latest')"
 
-        parts = image.rsplit(':', 1)
+        parts = image.rsplit(":", 1)
         if len(parts) != 2:
             return False, "Invalid image format"
 
         name_part, tag = parts
 
-        tag_pattern = r'^[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}$'
+        tag_pattern = r"^[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}$"
         if not re.match(tag_pattern, tag):
             return False, (
                 "Invalid tag format. Must start with alphanumeric or underscore, "
                 "followed by alphanumeric, dots, underscores, or hyphens (max 128 chars)"
             )
 
-        name_pattern = r'^[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*(\/[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*)*$'
+        name_pattern = r"^[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*(\/[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*)*$"
 
         # Handle registry URLs
-        if '/' in name_part:
-            registry_host, repo_path = name_part.split('/', 1)
+        if "/" in name_part:
+            registry_host, repo_path = name_part.split("/", 1)
 
             if not re.match(name_pattern, repo_path):
                 return False, (
@@ -106,7 +115,7 @@ class KubernetesClient:
 
         return True, None
 
-    def _validate_port(self, port):
+    def _validate_port(self, port: int) -> tuple[bool, str | None]:
         """
         Validate port number.
 
@@ -124,7 +133,7 @@ class KubernetesClient:
 
         return True, None
 
-    def _apply_yaml(self, yaml_content, namespace):
+    def _apply_yaml(self, yaml_content: str, namespace: str) -> bool:
         """
         Apply YAML manifest to Kubernetes cluster.
 
@@ -139,28 +148,25 @@ class KubernetesClient:
             manifest = safe_load(yaml_content)
 
             # Ensure namespace is set in metadata
-            if 'metadata' not in manifest:
-                manifest['metadata'] = {}
-            manifest['metadata']['namespace'] = namespace
+            if "metadata" not in manifest:
+                manifest["metadata"] = {}
+            manifest["metadata"]["namespace"] = namespace
 
-            utils.create_from_dict(
-                self.v1.api_client,
-                manifest
-            )
+            utils.create_from_dict(self.v1.api_client, manifest)
 
-            kind = manifest.get('kind', 'Resource')
-            name = manifest.get('metadata', {}).get('name', 'unknown')
+            kind = manifest.get("kind", "Resource")
+            name = manifest.get("metadata", {}).get("name", "unknown")
             print(f"Applied {kind}: {name} in {namespace}")
             return True
 
-        except ApiException as e:
+        except ApiException:
             print("Error applying YAML to Kubernetes")
             return False
-        except Exception as e:
+        except Exception:
             print("Error parsing or applying YAML")
             return False
 
-    def create_namespace(self, name):
+    def create_namespace(self, name: str) -> bool:
         """
         Create a namespace.
 
@@ -176,9 +182,7 @@ class KubernetesClient:
             return False
 
         try:
-            namespace = client.V1Namespace(
-                metadata=client.V1ObjectMeta(name=name)
-            )
+            namespace = client.V1Namespace(metadata=client.V1ObjectMeta(name=name))
             self.v1.create_namespace(namespace)
             print(f"Created namespace: {name}")
             return True
@@ -189,7 +193,7 @@ class KubernetesClient:
                 print(f"Error creating namespace: {e}")
             return False
 
-    def delete_namespace(self, name):
+    def delete_namespace(self, name: str) -> bool:
         """
         Delete a namespace.
 
@@ -215,7 +219,7 @@ class KubernetesClient:
                 print(f"Error deleting namespace: {e}")
             return False
 
-    def list_namespaces(self):
+    def list_namespaces(self) -> list[str]:
         """
         List all namespaces.
 
@@ -235,7 +239,7 @@ class KubernetesClient:
             print(f"Error listing namespaces: {e}")
             return []
 
-    def namespace_exists(self, name):
+    def namespace_exists(self, name: str) -> bool:
         """
         Check if a namespace exists.
 
@@ -258,7 +262,15 @@ class KubernetesClient:
                 return False
             raise
 
-    def create_deployment(self, name, namespace, image, port, template_dir, env_vars=None):
+    def create_deployment(
+        self,
+        name: str,
+        namespace: str,
+        image: str,
+        port: int,
+        template_dir: str,
+        env_vars: dict[str, str] | None = None,
+    ) -> bool:
         """
         Create a deployment using templates.
 
@@ -268,7 +280,7 @@ class KubernetesClient:
             image: Name of the image for the container
             port: Port to expose on the pod's IP address
             env_vars: Optional dict of environment variables
-            template_dir: Directory containing templates (default: templates/)
+            template_dir: Directory containing templates (default: automation/templates/)
 
         Returns:
             True if successful, False otherwise
@@ -294,20 +306,22 @@ class KubernetesClient:
             return False
 
         data = {
-            'name': name,
-            'namespace': namespace,
-            'image': image,
-            'port': port,
-            'env_vars': env_vars
+            "name": name,
+            "namespace": namespace,
+            "image": image,
+            "port": port,
+            "env_vars": env_vars,
         }
 
-        yaml_content = render_template('deployment.yaml.j2', data, template_dir)
+        yaml_content = render_template("deployment.yaml.j2", data, template_dir)
         if not yaml_content:
             return False
 
         return self._apply_yaml(yaml_content, namespace)
 
-    def create_service(self, name, namespace, port, target_port, template_dir):
+    def create_service(
+        self, name: str, namespace: str, port: int, target_port: int, template_dir: str
+    ) -> bool:
         """
         Create a service using templates.
 
@@ -343,16 +357,10 @@ class KubernetesClient:
             print(f"Invalid target port: {error_msg}")
             return False
 
-        data = {
-            'name': name,
-            'namespace': namespace,
-            'port': port,
-            'target_port': target_port
-        }
+        data = {"name": name, "namespace": namespace, "port": port, "target_port": target_port}
 
-        yaml_content = render_template('service.yaml.j2', data, template_dir)
+        yaml_content = render_template("service.yaml.j2", data, template_dir)
         if not yaml_content:
             return False
 
         return self._apply_yaml(yaml_content, namespace)
-

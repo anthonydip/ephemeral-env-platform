@@ -6,11 +6,15 @@ These tests require a running Kubernetes cluster (Minikube/k3s).
 Run with: pytest tests/test_integration.py -v
 Skip with: py test tests/ -v -m "not integration"
 """
-import pytest
+
 import time
+
+import pytest
+
 from automation.k8s_client import KubernetesClient
 
 pytestmark = pytest.mark.integration
+
 
 def wait_for_namespace_deletion(k8s_client, namespace, max_wait=30):
     """
@@ -31,10 +35,12 @@ def wait_for_namespace_deletion(k8s_client, namespace, max_wait=30):
         time.sleep(wait_interval)
     return False
 
+
 @pytest.fixture
 def k8s_client():
     """Create a real KubernetesClient (requires cluster)."""
     return KubernetesClient()
+
 
 @pytest.fixture
 def test_namespace():
@@ -46,8 +52,9 @@ def test_namespace():
     try:
         k8s.delete_namespace(namespace)
         wait_for_namespace_deletion(k8s, namespace, max_wait=30)
-    except:
-        pass
+    except Exception as e:
+        print(f"Failed to cleanup namespace {namespace}: {e}")
+
 
 def test_create_and_delete_namespace(k8s_client, test_namespace):
     """Test creating and deleting a namespace."""
@@ -61,6 +68,7 @@ def test_create_and_delete_namespace(k8s_client, test_namespace):
     deleted = wait_for_namespace_deletion(k8s_client, test_namespace, max_wait=30)
     assert deleted, f"Namespace {test_namespace} not deleted after 30 seconds"
 
+
 def test_create_deployment_without_env(k8s_client, test_namespace):
     """Test creating a deployment without environment variables."""
     k8s_client.create_namespace(test_namespace)
@@ -71,7 +79,7 @@ def test_create_deployment_without_env(k8s_client, test_namespace):
         image="nginx:latest",
         port=80,
         template_dir="automation/templates/",
-        env_vars=None
+        env_vars=None,
     )
 
     assert result
@@ -79,6 +87,7 @@ def test_create_deployment_without_env(k8s_client, test_namespace):
     deployments = k8s_client.apps_v1.list_namespaced_deployment(test_namespace)
     deployment_names = [d.metadata.name for d in deployments.items]
     assert "test-nginx" in deployment_names
+
 
 def test_create_deployment_with_env_vars(k8s_client, test_namespace):
     """Test creating a deployment with environment variables."""
@@ -90,10 +99,7 @@ def test_create_deployment_with_env_vars(k8s_client, test_namespace):
         image="postgres:15",
         port=5432,
         template_dir="automation/templates/",
-        env_vars={
-            'POSTGRES_PASSWORD': 'testpassword',
-            'POSTGRES_USER': 'testuser'
-        }
+        env_vars={"POSTGRES_PASSWORD": "testpassword", "POSTGRES_USER": "testuser"},
     )
 
     assert result
@@ -105,8 +111,9 @@ def test_create_deployment_with_env_vars(k8s_client, test_namespace):
     deployment = k8s_client.apps_v1.read_namespaced_deployment("test-postgres", test_namespace)
     container = deployment.spec.template.spec.containers[0]
     env_dict = {e.name: e.value for e in container.env}
-    assert env_dict['POSTGRES_PASSWORD'] == 'testpassword'
-    assert env_dict['POSTGRES_USER'] == 'testuser'
+    assert env_dict["POSTGRES_PASSWORD"] == "testpassword"
+    assert env_dict["POSTGRES_USER"] == "testuser"
+
 
 def test_create_service(k8s_client, test_namespace):
     """Test creating a service."""
@@ -117,7 +124,7 @@ def test_create_service(k8s_client, test_namespace):
         namespace=test_namespace,
         port=80,
         target_port=80,
-        template_dir="automation/templates/"
+        template_dir="automation/templates/",
     )
 
     assert result
@@ -130,6 +137,7 @@ def test_create_service(k8s_client, test_namespace):
     assert service.spec.ports[0].port == 80
     assert service.spec.ports[0].target_port == 80
 
+
 def test_full_environment_creation(k8s_client, test_namespace):
     """Test creating a full environment (namespace + deployment + service)"""
     assert k8s_client.create_namespace(test_namespace)
@@ -140,7 +148,7 @@ def test_full_environment_creation(k8s_client, test_namespace):
         image="nginx:latest",
         port=80,
         template_dir="automation/templates/",
-        env_vars=None
+        env_vars=None,
     )
 
     assert k8s_client.create_service(
@@ -148,7 +156,7 @@ def test_full_environment_creation(k8s_client, test_namespace):
         namespace=test_namespace,
         port=80,
         target_port=80,
-        template_dir="automation/templates/"
+        template_dir="automation/templates/",
     )
 
     assert k8s_client.namespace_exists(test_namespace)

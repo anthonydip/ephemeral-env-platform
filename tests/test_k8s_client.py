@@ -1,22 +1,27 @@
 """
 Tests for k8s_client.py validation methods
 """
+
+from unittest.mock import Mock
+
 import pytest
-from unittest.mock import Mock, patch
+
 from automation.k8s_client import KubernetesClient
+
 
 @pytest.fixture
 def mock_k8s_client(monkeypatch):
     """Create a KubernetesClient with mocked Kubernetes connection."""
     # Mock config.load_kube_config() call
-    monkeypatch.setattr('automation.k8s_client.config.load_kube_config', Mock())
+    monkeypatch.setattr("automation.k8s_client.config.load_kube_config", Mock())
 
     # Mock client APIs
-    monkeypatch.setattr('automation.k8s_client.client.CoreV1Api', Mock())
-    monkeypatch.setattr('automation.k8s_client.client.AppsV1Api', Mock())
+    monkeypatch.setattr("automation.k8s_client.client.CoreV1Api", Mock())
+    monkeypatch.setattr("automation.k8s_client.client.AppsV1Api", Mock())
 
     k8s = KubernetesClient()
     return k8s
+
 
 def test_validate_k8s_name_valid(mock_k8s_client):
     """Test validation of valid Kubernetes name."""
@@ -25,6 +30,7 @@ def test_validate_k8s_name_valid(mock_k8s_client):
 
     assert is_valid
     assert error is None
+
 
 def test_validate_k8s_name_too_long(mock_k8s_client):
     """Test validation rejects too long Kubernetes name."""
@@ -36,6 +42,7 @@ def test_validate_k8s_name_too_long(mock_k8s_client):
     assert "too long" in error
     assert "64" in error
 
+
 def test_validate_k8s_name_invalid_characters(mock_k8s_client):
     """Test validation rejects invalid characters in Kubernetes name."""
     # Must be lowercase alphanumeric + hyphens
@@ -46,6 +53,7 @@ def test_validate_k8s_name_invalid_characters(mock_k8s_client):
     assert not is_valid
     assert "invalid deployment name" in error.lower()
 
+
 def test_validate_k8s_name_empty(mock_k8s_client):
     """Test validation rejects missing Kubernetes name."""
     name = ""
@@ -54,6 +62,7 @@ def test_validate_k8s_name_empty(mock_k8s_client):
 
     assert not is_valid
     assert "cannot be empty" in error
+
 
 def test_validate_port_valid(mock_k8s_client):
     """Test validation of valid Kubernetes port."""
@@ -64,6 +73,7 @@ def test_validate_port_valid(mock_k8s_client):
     assert is_valid
     assert error is None
 
+
 def test_validate_port_too_large(mock_k8s_client):
     """Test validation rejects large ports."""
     port = 65536
@@ -72,6 +82,7 @@ def test_validate_port_too_large(mock_k8s_client):
 
     assert not is_valid
     assert "65536" in error
+
 
 def test_validate_port_negative(mock_k8s_client):
     """Test validation rejects negative ports."""
@@ -82,6 +93,7 @@ def test_validate_port_negative(mock_k8s_client):
     assert not is_valid
     assert "-1" in error
 
+
 def test_validate_port_not_integer(mock_k8s_client):
     """Test validation rejects non-integer ports."""
     port = "80"
@@ -90,6 +102,7 @@ def test_validate_port_not_integer(mock_k8s_client):
 
     assert not is_valid
     assert "integer" in error.lower()
+
 
 def test_validate_image_name_valid(mock_k8s_client):
     """Test validation of valid Kubernetes image name."""
@@ -100,6 +113,7 @@ def test_validate_image_name_valid(mock_k8s_client):
     assert is_valid
     assert error is None
 
+
 def test_validate_image_name_with_registry(mock_k8s_client):
     """Test validation of valid Kubernetes image name with registry."""
     image = "myregistry.com/team/backend:latest"
@@ -108,6 +122,7 @@ def test_validate_image_name_with_registry(mock_k8s_client):
 
     assert is_valid
     assert error is None
+
 
 def test_validate_image_name_without_tag(mock_k8s_client):
     """Test validation rejects images without tags."""
@@ -118,6 +133,7 @@ def test_validate_image_name_without_tag(mock_k8s_client):
     assert not is_valid
     assert "must include a tag" in error
 
+
 def test_validate_image_name_empty(mock_k8s_client):
     """Test validation rejects images with no name."""
     image = ""
@@ -126,6 +142,7 @@ def test_validate_image_name_empty(mock_k8s_client):
 
     assert not is_valid
     assert "cannot be empty" in error
+
 
 def test_validate_image_name_invalid_tag_format(mock_k8s_client):
     """Test validation rejects images with invalid tag format."""
@@ -136,6 +153,7 @@ def test_validate_image_name_invalid_tag_format(mock_k8s_client):
     assert not is_valid
     assert "tag format" in error.lower()
 
+
 def test_validate_image_name_invalid_repo_format(mock_k8s_client):
     """Test validation rejects images with invalid repository format."""
     image = "Myregistry.com/@team/backend:latest"
@@ -145,6 +163,7 @@ def test_validate_image_name_invalid_repo_format(mock_k8s_client):
     assert not is_valid
     assert "invalid repository name format" in error.lower()
 
+
 def test_validate_image_name_invalid_image_format(mock_k8s_client):
     """Test validation rejects images with invalid image format."""
     image = "Nginx:latest"
@@ -153,6 +172,7 @@ def test_validate_image_name_invalid_image_format(mock_k8s_client):
 
     assert not is_valid
     assert "invalid image name format" in error.lower()
+
 
 def test_validate_image_name_too_long(mock_k8s_client):
     """Test validation rejects too long image names."""

@@ -3,39 +3,32 @@ Main automation script for ephemeral environments.
 
 Creates and destroys Kubernetes namespaces for PR preview environments.
 """
-import sys
-import argparse
-from automation.k8s_client import KubernetesClient
-from automation.config_parser import load_config
 
-def main():
+import argparse
+
+from automation.config_parser import load_config
+from automation.k8s_client import KubernetesClient
+
+
+def main() -> None:
     """
     CLI entry point for ephemeral environment management.
 
     Parses command line arguments and delegates to appropriate handler.
     Exits with code 1 on invalid input.
     """
-    parser = argparse.ArgumentParser(
-        description="Manage ephemeral preview environments"
-    )
-    parser.add_argument(
-        "action",
-        choices=["create", "delete"],
-        help="Action to perform"
-    )
-    parser.add_argument(
-        "pr_number",
-        help="Pull request number"
-    )
+    parser = argparse.ArgumentParser(description="Manage ephemeral preview environments")
+    parser.add_argument("action", choices=["create", "delete"], help="Action to perform")
+    parser.add_argument("pr_number", help="Pull request number")
     parser.add_argument(
         "--config",
         default=".ephemeral-config.yaml",
-        help="Path to config file (default: .ephemeral-config.yaml)"
+        help="Path to config file (default: .ephemeral-config.yaml)",
     )
     parser.add_argument(
         "--templates",
         default="automation/templates/",
-        help="Path to templates directory (default: automation/templates/)"
+        help="Path to templates directory (default: automation/templates/)",
     )
 
     args = parser.parse_args()
@@ -48,7 +41,10 @@ def main():
     elif args.action == "delete":
         delete_environment(k8s, namespace)
 
-def create_environment(k8s, namespace, config_path, template_dir):
+
+def create_environment(
+    k8s: KubernetesClient, namespace: str, config_path: str, template_dir: str
+) -> None:
     """
     Create a new ephemeral environment.
 
@@ -70,30 +66,33 @@ def create_environment(k8s, namespace, config_path, template_dir):
         return
 
     # Create services and deployments
-    for service in config['services']:
+    for service in config["services"]:
         k8s.create_deployment(
-            name=service['name'],
+            name=service["name"],
             namespace=namespace,
-            image=service['image'],
-            port=service['port'],
+            image=service["image"],
+            port=service["port"],
             template_dir=template_dir,
-            env_vars=service.get('env')
+            env_vars=service.get("env"),
         )
 
         k8s.create_service(
-            name=service['name'],
+            name=service["name"],
             namespace=namespace,
-            port=service['port'],
-            target_port=service['port'],
-            template_dir=template_dir
+            port=service["port"],
+            target_port=service["port"],
+            template_dir=template_dir,
         )
 
-    print(f"\nEnvironment created!")
-    for service in config['services']:
-        local_port = service['port'] + 1000
-        print(f"    kubectl port-forward -n {namespace} svc/{service['name']} {local_port}:{service['port']}")
+    print("\nEnvironment created!")
+    for service in config["services"]:
+        local_port = service["port"] + 1000
+        print(
+            f"    kubectl port-forward -n {namespace} svc/{service['name']} {local_port}:{service['port']}"
+        )
 
-def delete_environment(k8s, namespace):
+
+def delete_environment(k8s: KubernetesClient, namespace: str) -> None:
     """
     Delete an ephemeral environment and all its resources.
 
@@ -107,6 +106,7 @@ def delete_environment(k8s, namespace):
         return
 
     print("\nEnvironment deleted! (May take a few seconds to fully terminate)")
+
 
 if __name__ == "__main__":
     main()

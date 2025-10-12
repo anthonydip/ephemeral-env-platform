@@ -1,0 +1,3 @@
+services:
+  - image: nginx:latest
+    port: 80

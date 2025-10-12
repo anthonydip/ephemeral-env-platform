@@ -1,0 +1,3 @@
+services:
+  - name: frontend
+    image: nginx:latest

@@ -1,5 +1,7 @@
 # Ephemeral Environment Platform
 
+![CI](https://github.com/anthonydip/ephemeral-env-platform/workflows/CI/badge.svg)
+
 🚧 **Work in Progress** 🚧
 
 Automated ephemeral preview environments for pull requests using Kubernetes, Python, and AWS.

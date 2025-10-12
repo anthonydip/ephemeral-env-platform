@@ -2,6 +2,8 @@
 Kubernetes client wrapper for namespace management.
 """
 
+from __future__ import annotations
+
 import re
 
 from kubernetes import client, config, utils

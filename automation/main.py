@@ -4,6 +4,8 @@ Main automation script for ephemeral environments.
 Creates and destroys Kubernetes namespaces for PR preview environments.
 """
 
+from __future__ import annotations
+
 import argparse
 
 from automation.config_parser import load_config

@@ -1,9 +1,20 @@
+"""
+Configuration file parser for ephemeral environment platform.
+
+Loads and validates YAML configuration files that define services
+to be deployed in preview environments.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
 from yaml import YAMLError, safe_load
+
+from automation.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def load_config(config_path: str) -> dict[str, Any] | None:
@@ -19,8 +30,10 @@ def load_config(config_path: str) -> dict[str, Any] | None:
     path = Path(config_path)
 
     if not path.is_file():
-        print(f"Error: Config file '{config_path}' does not exist")
+        logger.error("Config file not found", extra={"config_path": config_path})
         return None
+
+    logger.debug(f"Loading config from {config_path}")
 
     try:
         with open(config_path) as file:
@@ -28,27 +41,52 @@ def load_config(config_path: str) -> dict[str, Any] | None:
 
         # Validate structure
         if "services" not in config:
-            print("Config must have 'services' key")
+            logger.error("Config missing 'services' key", extra={"config_path": config_path})
             return None
 
         # Validate each service
         for i, service in enumerate(config["services"]):
             if "name" not in service:
-                print(f"Service at index {i} must have a 'name'")
+                logger.error(
+                    "Service missing 'name' field",
+                    extra={"config_path": config_path, "service_index": i},
+                )
                 return None
             if "image" not in service:
-                print(f"Service at index {i} must have an 'image'")
+                logger.error(
+                    "Service missing 'image' field",
+                    extra={
+                        "config_path": config_path,
+                        "service_index": i,
+                        "service_name": service.get("name"),
+                    },
+                )
                 return None
             if "port" not in service:
-                print(f"Service at index {i} must have a 'port'")
+                logger.error(
+                    "Service missing 'port' field",
+                    extra={
+                        "config_path": config_path,
+                        "service_index": i,
+                        "service_name": service.get("name"),
+                    },
+                )
                 return None
 
-        print(f"Successfully loaded config from {config_path}")
+        logger.info(
+            "Successfully loaded config",
+            extra={"config_path": config_path, "service_count": len(config["services"])},
+        )
         return config
 
-    except YAMLError:
-        print(f"Invalid YAML syntax in '{config_path}'")
+    except YAMLError as e:
+        logger.error(
+            "Invalid YAML syntax in config file",
+            extra={"config_path": config_path, "error": str(e)},
+        )
         return None
-    except OSError:
-        print(f"Could not read config file '{config_path}'")
+    except OSError as e:
+        logger.error(
+            "Could not read config file", extra={"config_path": config_path, "error": str(e)}
+        )
         return None

@@ -14,10 +14,18 @@ from automation.config_parser import load_config
 from automation.k8s_client import KubernetesClient
 from automation.logger import setup_logger
 
+log_file_env = os.getenv("LOG_FILE")
+if log_file_env == "":
+    log_file = None
+elif log_file_env is None:
+    log_file = "logs/ephemeral-env.log"
+else:
+    log_file = log_file_env
+
 logger = setup_logger(
     __name__,
     level=os.getenv("LOG_LEVEL", "INFO"),
-    log_file=os.getenv("LOG_FILE", "logs/ephemeral-env.log"),
+    log_file=log_file,
 )
 
 
@@ -131,7 +139,7 @@ def create_environment(
         )
         return False
 
-    logger.info(f"Environment created successfully: {namespace}", extra={"namespace", namespace})
+    logger.info(f"Environment created successfully: {namespace}", extra={"namespace": namespace})
     logger.info("Access services with kubectl port-forward:")
     for service in config["services"]:
         local_port = service["port"] + 1000

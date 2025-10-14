@@ -10,7 +10,10 @@ from kubernetes import client, config, utils
 from kubernetes.client.rest import ApiException
 from yaml import safe_load
 
+from automation.logger import get_logger
 from automation.template_renderer import render_template
+
+logger = get_logger(__name__)
 
 
 class KubernetesClient:
@@ -22,10 +25,15 @@ class KubernetesClient:
         """
         Initialize Kubernetes client.
         """
-        # Load kubeconfig from default location (~/.kube/config)
-        config.load_kube_config()
-        self.v1 = client.CoreV1Api()
-        self.apps_v1 = client.AppsV1Api()
+        try:
+            # Load kubeconfig from default location (~/.kube/config)
+            config.load_kube_config()
+            self.v1 = client.CoreV1Api()
+            self.apps_v1 = client.AppsV1Api()
+            logger.info("Kubernetes client initialized successfully")
+        except Exception as e:
+            logger.critical(f"Failed to initialize Kubernetes client: {e}")
+            raise
 
     def _validate_k8s_name(
         self, name: str, resource_type: str = "resource"
@@ -41,22 +49,26 @@ class KubernetesClient:
             tuple: (is_valid: bool, error_message: str or None)
         """
         if not name:
-            return False, f"{resource_type.capitalize()} name cannot be empty"
+            error = f"{resource_type.captialize()} name cannot be empty"
+            logger.error(error)
+            return False, error
 
         if len(name) > 63:
-            return (
-                False,
-                f"{resource_type.capitalize()} name too long (max 63 chars, got {len(name)})",
-            )
+            error = f"{resource_type.capitalize()} name too long (max 63 chars, got {len(name)})"
+            logger.error(error, extra={"name": name, "length": len(name)})
+            return False, error
 
         # Lowercase alphanumeric + hyphens, start/end with alphanumeric
         pattern = r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
         if not re.match(pattern, name):
-            return False, (
+            error = (
                 f"Invalid {resource_type} name. Must be lowercase letters, numbers, "
                 "and hyphens only. Must start and end with alphanumeric character."
             )
+            logger.error(error, extra={"name": name})
+            return False, error
 
+        logger.debug(f"Validated {resource_type} name: {name}")
         return True, None
 
     def _validate_image_name(self, image: str) -> tuple[bool, str | None]:
@@ -75,23 +87,31 @@ class KubernetesClient:
             tuple: (is_valid: bool, error_message: str or None)
         """
         if not image:
-            return False, "Image name cannot be empty"
+            error = "Image name cannot be empty"
+            logger.error(error)
+            return False, error
 
         if ":" not in image:
-            return False, "Image must include a tag (e.g., 'nginx:latest')"
+            error = "Image must include a tag (e.g., 'nginx:latest')"
+            logger.error(error)
+            return False, error
 
         parts = image.rsplit(":", 1)
         if len(parts) != 2:
-            return False, "Invalid image format"
+            error = "Invalid image format"
+            logger.error(error)
+            return False, error
 
         name_part, tag = parts
 
         tag_pattern = r"^[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}$"
         if not re.match(tag_pattern, tag):
-            return False, (
+            error = (
                 "Invalid tag format. Must start with alphanumeric or underscore, "
                 "followed by alphanumeric, dots, underscores, or hyphens (max 128 chars)"
             )
+            logger.error(error, extra={"image": image, "tag": tag})
+            return False, error
 
         name_pattern = r"^[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*(\/[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*)*$"
 
@@ -100,21 +120,28 @@ class KubernetesClient:
             registry_host, repo_path = name_part.split("/", 1)
 
             if not re.match(name_pattern, repo_path):
-                return False, (
+                error = (
                     "Invalid repository name format. Must be lowercase alphanumeric "
                     "with dots, underscores, double underscores, or hyphens as separators"
                 )
+                logger.error(error, extra={"image": image, "repo_path": repo_path})
+                return False, error
         # No registry, just repository name
         else:
             if not re.match(name_pattern, name_part):
-                return False, (
+                error = (
                     "Invalid image name format. Must be lowercase alphanumeric "
                     "with dots, underscores, double underscores, or hyphens as separators"
                 )
+                logger.error(error, extra={"image": image})
+                return False, error
 
         if len(image) > 255:
-            return False, f"Image reference too long ({len(image)} chars, recommended max 255)"
+            error = f"Image reference too long ({len(image)} chars, recommended max 255)"
+            logger.warning(error, extra={"image": image})
+            return False, error
 
+        logger.debug(f"Validated image: {image}")
         return True, None
 
     def _validate_port(self, port: int) -> tuple[bool, str | None]:
@@ -128,11 +155,16 @@ class KubernetesClient:
             tuple: (is_valid: bool, error_message: str or None)
         """
         if not isinstance(port, int):
-            return False, f"Port must be an integer, got {type(port).__name__}"
+            error = f"Port must be an integer, got {type(port).__name__}"
+            logger.error(error, extra={"port": port, "type": type(port).__name__})
+            return False, error
 
         if not (1 <= port <= 65535):
-            return False, f"Port must be between 1-65535, got {port}"
+            error = f"Port must be between 1-65535, got {port}"
+            logger.error(error, extra={"port": port})
+            return False, error
 
+        logger.debug(f"Validated port: {port}")
         return True, None
 
     def _apply_yaml(self, yaml_content: str, namespace: str) -> bool:
@@ -158,14 +190,20 @@ class KubernetesClient:
 
             kind = manifest.get("kind", "Resource")
             name = manifest.get("metadata", {}).get("name", "unknown")
-            print(f"Applied {kind}: {name} in {namespace}")
+            logger.info(
+                f"Applied {kind}: {name}",
+                extra={"kind": kind, "name": name, "namespace": namespace},
+            )
             return True
 
-        except ApiException:
-            print("Error applying YAML to Kubernetes")
+        except ApiException as e:
+            logger.error(
+                "Kubernetes API error applying YAML",
+                extra={"namespace": namespace, "status": e.status, "reason": e.reason},
+            )
             return False
-        except Exception:
-            print("Error parsing or applying YAML")
+        except Exception as e:
+            logger.error(f"Error parsing or applying YAML: {e}", extra={"namespace": namespace})
             return False
 
     def create_namespace(self, name: str) -> bool:
@@ -180,19 +218,21 @@ class KubernetesClient:
         """
         is_valid, error_msg = self._validate_k8s_name(name, "namespace")
         if not is_valid:
-            print(error_msg)
             return False
 
         try:
             namespace = client.V1Namespace(metadata=client.V1ObjectMeta(name=name))
             self.v1.create_namespace(namespace)
-            print(f"Created namespace: {name}")
+            logger.info(f"Created namespace: {name}", extra={"namespace": name})
             return True
         except ApiException as e:
             if e.status == 409:
-                print(f"Namespace {name} already exists")
+                logger.warning(f"Namespace {name} already exists", extra={"namespace": name})
             else:
-                print(f"Error creating namespace: {e}")
+                logger.error(
+                    f"Error creating namespace: {e}",
+                    extra={"namespace": name, "status": e.status, "reason": e.reason},
+                )
             return False
 
     def delete_namespace(self, name: str) -> bool:
@@ -207,18 +247,20 @@ class KubernetesClient:
         """
         is_valid, error_msg = self._validate_k8s_name(name, "namespace")
         if not is_valid:
-            print(error_msg)
             return False
 
         try:
             self.v1.delete_namespace(name)
-            print(f"Deleted namespace: {name}")
+            logger.info(f"Deleted namespace: {name}", extra={"namespace": name})
             return True
         except ApiException as e:
             if e.status == 404:
-                print(f"Namespace {name} not found")
+                logger.warning(f"Namespace {name} not found", extra={"namespace": name})
             else:
-                print(f"Error deleting namespace: {e}")
+                logger.error(
+                    f"Error deleting namespace: {e}",
+                    extra={"namespace": name, "status": e.status, "reason": e.reason},
+                )
             return False
 
     def list_namespaces(self) -> list[str]:
@@ -231,14 +273,11 @@ class KubernetesClient:
         try:
             namespaces = self.v1.list_namespace()
             namespace_names = [ns.metadata.name for ns in namespaces.items]
-
-            print("Namespaces:")
-            for name in namespace_names:
-                print(f" - {name}")
-
+            logger.info(f"Listed {len(namespace_names)} namespaces")
+            logger.debug(f"Namespaces: {', '.join(namespace_names)}")
             return namespace_names
         except ApiException as e:
-            print(f"Error listing namespaces: {e}")
+            logger.error(f"Error listing namespaces: {e}", extra={"status": e.status})
             return []
 
     def namespace_exists(self, name: str) -> bool:
@@ -253,15 +292,17 @@ class KubernetesClient:
         """
         is_valid, error_msg = self._validate_k8s_name(name, "namespace")
         if not is_valid:
-            print(error_msg)
             return False
 
         try:
             self.v1.read_namespace(name)
+            logger.debug(f"Namespace {name} exists")
             return True
         except ApiException as e:
             if e.status == 404:
+                logger.debug(f"Namespace {name} does not exist")
                 return False
+            logger.error(f"Error checking namespace existence: {e}")
             raise
 
     def create_deployment(
@@ -287,24 +328,25 @@ class KubernetesClient:
         Returns:
             True if successful, False otherwise
         """
+        logger.info(
+            f"Creating deployment: {name}",
+            extra={"deployment": name, "namespace": namespace, "image": image, "port": port},
+        )
+
         is_valid, error_msg = self._validate_k8s_name(name, "deployment")
         if not is_valid:
-            print(error_msg)
             return False
 
         is_valid, error_msg = self._validate_k8s_name(namespace, "namespace")
         if not is_valid:
-            print(error_msg)
             return False
 
         is_valid, error_msg = self._validate_image_name(image)
         if not is_valid:
-            print(error_msg)
             return False
 
         is_valid, error_msg = self._validate_port(port)
         if not is_valid:
-            print(error_msg)
             return False
 
         data = {
@@ -339,24 +381,32 @@ class KubernetesClient:
         Returns:
             True if successful, False otherwise
         """
+        logger.info(
+            f"Creating service: {name}",
+            extra={
+                "service": name,
+                "namespace": namespace,
+                "port": port,
+                "target_port": target_port,
+            },
+        )
+
         is_valid, error_msg = self._validate_k8s_name(name, "service")
         if not is_valid:
-            print(error_msg)
             return False
 
         is_valid, error_msg = self._validate_k8s_name(namespace, "namespace")
         if not is_valid:
-            print(error_msg)
             return False
 
         is_valid, error_msg = self._validate_port(port)
         if not is_valid:
-            print(f"Invalid service port: {error_msg}")
+            logger.error("Invalid service port", extra={"port": port})
             return False
 
         is_valid, error_msg = self._validate_port(target_port)
         if not is_valid:
-            print(f"Invalid target port: {error_msg}")
+            logger.error("Invalid target port", extra={"target_port": target_port})
             return False
 
         data = {"name": name, "namespace": namespace, "port": port, "target_port": target_port}

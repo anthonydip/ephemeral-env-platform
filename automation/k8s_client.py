@@ -189,10 +189,10 @@ class KubernetesClient:
             utils.create_from_dict(self.v1.api_client, manifest)
 
             kind = manifest.get("kind", "Resource")
-            name = manifest.get("metadata", {}).get("name", "unknown")
+            resource_name = manifest.get("metadata", {}).get("name", "unknown")
             logger.info(
-                f"Applied {kind}: {name}",
-                extra={"kind": kind, "name": name, "namespace": namespace},
+                f"Applied {kind}: {resource_name}",
+                extra={"kind": kind, "resource_name": resource_name, "namespace": namespace},
             )
             return True
 

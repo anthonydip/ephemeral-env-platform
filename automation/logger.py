@@ -11,29 +11,27 @@ import sys
 from pathlib import Path
 
 
-def setup_logger(
-    name: str,
+def setup_logging(
     level: str = "INFO",
     log_file: str | None = None,
-) -> logging.Logger:
+) -> None:
     """
-    Configure and return a logger instance with consistent formatting.
+    Configure application-wide logging.
+
+    Should be called once at application startup (in main.py).
+    Configures the root logger, which all module loggers inherit from.
 
     Args:
-        name: Logger name (typically __name__ from calling module)
         level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         log_file: Optional file path for log output
-
-    Returns:
-        Configured logger instance
     """
-    logger = logging.getLogger(name)
     log_level = getattr(logging, level.upper())
-    logger.setLevel(log_level)
 
-    # Prevent duplicate handlers if logger already configured
-    if logger.handlers:
-        return logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+
+    # Remove existing handlers
+    root_logger.handlers.clear()
 
     # Create formatters
     detailed_formatter = logging.Formatter(
@@ -47,7 +45,7 @@ def setup_logger(
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(log_level)
     console_handler.setFormatter(console_formatter)
-    logger.addHandler(console_handler)
+    root_logger.addHandler(console_handler)
 
     # Set up file handler (if specified)
     if log_file:
@@ -57,14 +55,15 @@ def setup_logger(
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.DEBUG)  # Always DEBUG for files
         file_handler.setFormatter(detailed_formatter)
-        logger.addHandler(file_handler)
-
-    return logger
+        root_logger.addHandler(file_handler)
 
 
 def get_logger(name: str) -> logging.Logger:
     """
-    Get a logger instance.
+    Get a logger for a module.
+
+    Call this at module level: logger = get_logger(__name__)
+    The logger inherits configuration from the root logger.
 
     Args:
         name: Logger name (use __name__)

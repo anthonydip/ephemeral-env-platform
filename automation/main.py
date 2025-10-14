@@ -12,21 +12,7 @@ import sys
 
 from automation.config_parser import load_config
 from automation.k8s_client import KubernetesClient
-from automation.logger import setup_logger
-
-log_file_env = os.getenv("LOG_FILE")
-if log_file_env == "":
-    log_file = None
-elif log_file_env is None:
-    log_file = "logs/ephemeral-env.log"
-else:
-    log_file = log_file_env
-
-logger = setup_logger(
-    __name__,
-    level=os.getenv("LOG_LEVEL", "INFO"),
-    log_file=log_file,
-)
+from automation.logger import get_logger, setup_logging
 
 
 def main() -> None:
@@ -58,8 +44,19 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # Update log level if specified
-    logger.setLevel(args.log_level)
+    # Determine log file path
+    log_file_env = os.getenv("LOG_FILE")
+    if log_file_env == "":
+        log_file = None
+    elif log_file_env is None:
+        log_file = "logs/ephemeral-env.log"
+    else:
+        log_file = log_file_env
+
+    # Configure logging once at startup
+    setup_logging(level=args.log_level, log_file=log_file)
+
+    logger = get_logger(__name__)
 
     namespace = f"pr-{args.pr_number}"
 
@@ -98,6 +95,8 @@ def create_environment(
         config_path: Path to configuration file
         template_dir: Path to templates directory
     """
+    logger = get_logger(__name__)
+
     logger.info(f"Creating environment: {namespace}", extra={"namespace": namespace})
 
     # Load YAML configuration file
@@ -158,6 +157,8 @@ def delete_environment(k8s: KubernetesClient, namespace: str) -> bool:
         k8s: KubernetesClient instance
         namespace: Namespace name to delete
     """
+    logger = get_logger(__name__)
+
     logger.info(f"Deleting environment: {namespace}", extra={"namespace": namespace})
 
     if not k8s.delete_namespace(namespace):

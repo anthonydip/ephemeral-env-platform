@@ -49,7 +49,7 @@ class KubernetesClient:
             tuple: (is_valid: bool, error_message: str or None)
         """
         if not name:
-            error = f"{resource_type.captialize()} name cannot be empty"
+            error = f"{resource_type.capitalize()} name cannot be empty"
             logger.error(error)
             return False, error
 
@@ -88,18 +88,18 @@ class KubernetesClient:
         """
         if not image:
             error = "Image name cannot be empty"
-            logger.error(error)
+            logger.error(error, extra={"image": image})
             return False, error
 
         if ":" not in image:
             error = "Image must include a tag (e.g., 'nginx:latest')"
-            logger.error(error)
+            logger.error(error, extra={"image": image})
             return False, error
 
         parts = image.rsplit(":", 1)
         if len(parts) != 2:
             error = "Invalid image format"
-            logger.error(error)
+            logger.error(error, extra={"image": image})
             return False, error
 
         name_part, tag = parts

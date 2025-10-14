@@ -7,9 +7,18 @@ Creates and destroys Kubernetes namespaces for PR preview environments.
 from __future__ import annotations
 
 import argparse
+import os
+import sys
 
 from automation.config_parser import load_config
 from automation.k8s_client import KubernetesClient
+from automation.logger import setup_logger
+
+logger = setup_logger(
+    __name__,
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    log_file=os.getenv("LOG_FILE", "logs/ephemeral-env.log"),
+)
 
 
 def main() -> None:
@@ -32,21 +41,46 @@ def main() -> None:
         default="automation/templates/",
         help="Path to templates directory (default: automation/templates/)",
     )
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default=os.getenv("LOG_LEVEL", "INFO"),
+        help="Set logging level (default: INFO)",
+    )
 
     args = parser.parse_args()
 
+    # Update log level if specified
+    logger.setLevel(args.log_level)
+
     namespace = f"pr-{args.pr_number}"
-    k8s = KubernetesClient()
+
+    logger.info(
+        f"Starting {args.action} operation",
+        extra={"action": args.action, "pr_number": args.pr_number, "namespace": namespace},
+    )
+
+    try:
+        k8s = KubernetesClient()
+    except Exception as e:
+        logger.critical(f"Failed to initialize Kubernetes client: {e}")
+        sys.exit(1)
 
     if args.action == "create":
-        create_environment(k8s, namespace, args.config, args.templates)
+        success = create_environment(k8s, namespace, args.config, args.templates)
     elif args.action == "delete":
-        delete_environment(k8s, namespace)
+        success = delete_environment(k8s, namespace)
+
+    if not success:
+        logger.error(f"Operation {args.action} failed", extra={"namespace": namespace})
+        sys.exit(1)
+
+    logger.info(f"Operation {args.action} completed successfully")
 
 
 def create_environment(
     k8s: KubernetesClient, namespace: str, config_path: str, template_dir: str
-) -> None:
+) -> bool:
     """
     Create a new ephemeral environment.
 
@@ -56,20 +90,21 @@ def create_environment(
         config_path: Path to configuration file
         template_dir: Path to templates directory
     """
-    print(f"Creating environment: {namespace}")
+    logger.info(f"Creating environment: {namespace}", extra={"namespace": namespace})
 
     # Load YAML configuration file
     config = load_config(config_path)
     if not config:
-        return
+        return False
 
     # Create namespace
     if not k8s.create_namespace(namespace):
-        return
+        return False
 
     # Create services and deployments
+    failed_services = []
     for service in config["services"]:
-        k8s.create_deployment(
+        deployment_success = k8s.create_deployment(
             name=service["name"],
             namespace=namespace,
             image=service["image"],
@@ -78,7 +113,7 @@ def create_environment(
             env_vars=service.get("env"),
         )
 
-        k8s.create_service(
+        service_success = k8s.create_service(
             name=service["name"],
             namespace=namespace,
             port=service["port"],
@@ -86,15 +121,28 @@ def create_environment(
             template_dir=template_dir,
         )
 
-    print("\nEnvironment created!")
+        if not (deployment_success and service_success):
+            failed_services.append(service["name"])
+
+    if failed_services:
+        logger.error(
+            "Some services failed to deploy",
+            extra={"namespace": namespace, "failed_services": failed_services},
+        )
+        return False
+
+    logger.info(f"Environment created successfully: {namespace}", extra={"namespace", namespace})
+    logger.info("Access services with kubectl port-forward:")
     for service in config["services"]:
         local_port = service["port"] + 1000
-        print(
-            f"    kubectl port-forward -n {namespace} svc/{service['name']} {local_port}:{service['port']}"
+        logger.info(
+            f"  kubectl port-forward -n {namespace} svc/{service['name']} {local_port}:{service['port']}"
         )
 
+    return True
 
-def delete_environment(k8s: KubernetesClient, namespace: str) -> None:
+
+def delete_environment(k8s: KubernetesClient, namespace: str) -> bool:
     """
     Delete an ephemeral environment and all its resources.
 
@@ -102,12 +150,17 @@ def delete_environment(k8s: KubernetesClient, namespace: str) -> None:
         k8s: KubernetesClient instance
         namespace: Namespace name to delete
     """
-    print(f"Deleting environment: {namespace}")
+    logger.info(f"Deleting environment: {namespace}", extra={"namespace": namespace})
 
     if not k8s.delete_namespace(namespace):
-        return
+        return False
 
-    print("\nEnvironment deleted! (May take a few seconds to fully terminate)")
+    logger.info(
+        f"Environment successfully deleted: {namespace} (resources may take a few seconds to terminate)",
+        extra={"namespace": namespace},
+    )
+
+    return True
 
 
 if __name__ == "__main__":

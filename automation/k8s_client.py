@@ -55,7 +55,7 @@ class KubernetesClient:
 
         if len(name) > 63:
             error = f"{resource_type.capitalize()} name too long (max 63 chars, got {len(name)})"
-            logger.error(error, extra={"name": name, "length": len(name)})
+            logger.error(error, extra={"resource_name": name, "length": len(name)})
             return False, error
 
         # Lowercase alphanumeric + hyphens, start/end with alphanumeric
@@ -65,7 +65,7 @@ class KubernetesClient:
                 f"Invalid {resource_type} name. Must be lowercase letters, numbers, "
                 "and hyphens only. Must start and end with alphanumeric character."
             )
-            logger.error(error, extra={"name": name})
+            logger.error(error, extra={"resource_name": name})
             return False, error
 
         logger.debug(f"Validated {resource_type} name: {name}")

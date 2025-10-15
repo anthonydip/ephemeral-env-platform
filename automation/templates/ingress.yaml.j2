@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ name }}-ingress
+  namespace: {{ namespace }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+    traefik.ingress.kubernetes.io/router.middlewares: {{ namespace }}-stripprefix@kubernetescrd
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /{{ namespace }}
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80

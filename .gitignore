@@ -3,6 +3,7 @@ kubeconfig*
 *.key
 *.pem
 .env
+.coverage
 
 # Ignore config at root, but allow examples
 .ephemeral-config.yaml

@@ -138,8 +138,40 @@ def create_environment(
         )
         return False
 
-    logger.info(f"Environment created successfully: {namespace}", extra={"namespace": namespace})
-    logger.info("Access services with kubectl port-forward:")
+    # Create middleware for path stripping
+    middleware_success = k8s.create_middleware(
+        name="stripprefix",
+        namespace=namespace,
+        prefixes=[f"/{namespace}"],
+        template_dir=template_dir,
+    )
+
+    if not middleware_success:
+        logger.error("Failed to create middleware", extra={"namespace": namespace})
+        return False
+
+    # Create ingress for external access (if configured)
+    if config.get("ingress", {}).get("enabled", False):
+        ingress_config = config["ingress"]
+        ingress_success = k8s.create_ingress(
+            name=f"{namespace}-ingress",
+            namespace=namespace,
+            path=f"/{namespace}",
+            service_name=ingress_config["service"],
+            service_port=ingress_config["port"],
+            middleware_name="stripprefix",
+            template_dir=template_dir,
+        )
+
+        if not ingress_success:
+            logger.error("Failed to create ingress", extra={"namespace": namespace})
+            return False
+
+        logger.info(f"Preview environment accessible at: http://<EC2-IP>/{namespace}/")
+    else:
+        logger.info("Ingress not configured - environment only accessible via port-forward")
+
+    logger.info("Access services directly with kubectl port-forward:")
     for service in config["services"]:
         local_port = service["port"] + 1000
         logger.info(

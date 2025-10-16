@@ -15,3 +15,8 @@ services:
       POSTGRES_PASSWORD: mysecretpassword
       POSTGRES_USER: myuser
       POSTGRES_DB: mydb
+
+ingress:
+  enabled: true
+  service: frontend
+  port: 80

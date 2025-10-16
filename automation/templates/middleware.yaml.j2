@@ -1,9 +1,11 @@
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: stripprefix
+  name: {{ name }}
   namespace: {{ namespace }}
 spec:
   stripPrefix:
     prefixes:
-      - /{{ namespace }}
+    {% for prefix in prefixes %}
+      - {{ prefix }}
+    {% endfor %}

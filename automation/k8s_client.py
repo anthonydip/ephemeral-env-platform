@@ -186,9 +186,31 @@ class KubernetesClient:
                 manifest["metadata"] = {}
             manifest["metadata"]["namespace"] = namespace
 
+            kind = manifest.get("kind", "Resource")
+            api_version = manifest.get("apiVersion", "")
+
+            # Handle Traefik CRDs (Middleware, IngressRoute, etc.)
+            if "traefik.io" in api_version or "traefik.containo.us" in api_version:
+                custom_api = client.CustomObjectsApi()
+
+                group, version = api_version.split("/")
+
+                plural = kind.lower() + "s"
+
+                custom_api.create_namespaced_custom_object(
+                    group=group, version=version, namespace=namespace, plural=plural, body=manifest
+                )
+
+                resource_name = manifest.get("metadata", {}).get("name", "unknown")
+                logger.info(
+                    f"Applied {kind}: {resource_name}",
+                    extra={"kind": kind, "resource_name": resource_name, "namespace": namespace},
+                )
+                return True
+
+            # Handle standard Kubernetes resources
             utils.create_from_dict(self.v1.api_client, manifest)
 
-            kind = manifest.get("kind", "Resource")
             resource_name = manifest.get("metadata", {}).get("name", "unknown")
             logger.info(
                 f"Applied {kind}: {resource_name}",
@@ -412,6 +434,105 @@ class KubernetesClient:
         data = {"name": name, "namespace": namespace, "port": port, "target_port": target_port}
 
         yaml_content = render_template("service.yaml.j2", data, template_dir)
+        if not yaml_content:
+            return False
+
+        return self._apply_yaml(yaml_content, namespace)
+
+    def create_middleware(
+        self, name: str, namespace: str, prefixes: list[str], template_dir: str
+    ) -> bool:
+        """
+        Create a Traefik Middleware using templates.
+
+        Args:
+            name: Name of the middleware
+            namespace: Namespace where the middleware will be created
+            prefixes: List of path prefixes to strip (e.g., ['/pr-999'])
+            template_dir: Directory containing templates
+
+        Returns:
+            True if successful, False otherwise
+        """
+        logger.info(
+            f"Creating middleware: {name}",
+            extra={"middleware": name, "namespace": namespace, "prefixes": prefixes},
+        )
+
+        is_valid, error_msg = self._validate_k8s_name(name, "middleware")
+        if not is_valid:
+            return False
+
+        is_valid, error_msg = self._validate_k8s_name(namespace, "namespace")
+        if not is_valid:
+            return False
+
+        data = {"name": name, "namespace": namespace, "prefixes": prefixes}
+
+        yaml_content = render_template("middleware.yaml.j2", data, template_dir)
+        if not yaml_content:
+            return False
+
+        return self._apply_yaml(yaml_content, namespace)
+
+    def create_ingress(
+        self,
+        name: str,
+        namespace: str,
+        path: str,
+        service_name: str,
+        service_port: int,
+        middleware_name: str,
+        template_dir: str,
+    ) -> bool:
+        """
+        Create an Ingress resource using templates.
+
+        Args:
+            name: Name of the ingress
+            namespace: Namespace where the ingress will be created
+            path: URL path (e.g., '/pr-999')
+            service_name: Backend service name (e.g., 'frontend')
+            service_port: Backend service port (e.g., 80)
+            middleware_name: Name of the middleware to use (e.g., 'stripprefix')
+            template_dir: Directory containing templates
+
+        Returns:
+            True if successful, False otherwise
+        """
+        logger.info(
+            f"Creating ingress: {name}",
+            extra={
+                "ingress": name,
+                "namespace": namespace,
+                "path": path,
+                "service": service_name,
+            },
+        )
+
+        is_valid, error_msg = self._validate_k8s_name(name, "ingress")
+        if not is_valid:
+            return False
+
+        is_valid, error_msg = self._validate_k8s_name(namespace, "namespace")
+        if not is_valid:
+            return False
+
+        is_valid, error_msg = self._validate_port(service_port)
+        if not is_valid:
+            logger.error("Invalid service port", extra={"service_port": service_port})
+            return False
+
+        data = {
+            "name": name,
+            "namespace": namespace,
+            "path": path,
+            "service_name": service_name,
+            "service_port": service_port,
+            "middleware_name": middleware_name,
+        }
+
+        yaml_content = render_template("ingress.yaml.j2", data, template_dir)
         if not yaml_content:
             return False
 

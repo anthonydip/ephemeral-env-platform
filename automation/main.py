@@ -150,26 +150,40 @@ def create_environment(
         logger.error("Failed to create middleware", extra={"namespace": namespace})
         return False
 
-    # Create ingress for external access (if configured)
-    if config.get("ingress", {}).get("enabled", False):
-        ingress_config = config["ingress"]
-        ingress_success = k8s.create_ingress(
-            name=f"{namespace}-ingress",
-            namespace=namespace,
-            path=f"/{namespace}",
-            service_name=ingress_config["service"],
-            service_port=ingress_config["port"],
-            middleware_name="stripprefix",
-            template_dir=template_dir,
-        )
+    # Create ingress for each service that has ingress.enabled = True
+    ingress_created = False
+    for service in config["services"]:
+        if service.get("ingress", {}).get("enabled", False):
+            service_path = service["ingress"].get("path", "/")
+            full_path = f"/{namespace}{service_path}"
 
-        if not ingress_success:
-            logger.error("Failed to create ingress", extra={"namespace": namespace})
-            return False
+            ingress_success = k8s.create_ingress(
+                name=f"{namespace}-{service['name']}-ingress",
+                namespace=namespace,
+                path=full_path,
+                service_name=service["name"],
+                service_port=service["port"],
+                middleware_name="stripprefix",
+                template_dir=template_dir,
+            )
 
+            if not ingress_success:
+                logger.error(
+                    f"Failed to create ingress for {service['name']}",
+                    extra={"namespace": namespace, "service": service["name"]},
+                )
+                return False
+
+            ingress_created = True
+            logger.info(
+                f"Created ingress for {service['name']} at {full_path}",
+                extra={"namespace": namespace, "service": service["name"], "path": full_path},
+            )
+
+    if ingress_created:
         logger.info(f"Preview environment accessible at: http://<EC2-IP>/{namespace}/")
     else:
-        logger.info("Ingress not configured - environment only accessible via port-forward")
+        logger.info("No ingress configured - environment only accessible via port-forward")
 
     logger.info("Access services directly with kubectl port-forward:")
     for service in config["services"]:

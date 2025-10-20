@@ -1,22 +1,24 @@
 services:
   - name: frontend
-    image: nginx:latest
+    image: anthonydip/todo-frontend:latest
     port: 80
+    ingress:
+      enabled: true
+      path: "/"
+
   - name: backend
-    image: node:alpine
-    port: 3000
+    image: anthonydip/todo-backend:latest
+    port: 5000
+    ingress:
+      enabled: true
+      path: "/api"
     env:
-      NODE_ENV: production
-      API_URL: http://backend:3000
+      DATABASE_URL: postgresql://postgres:password@database:5432/todos
+      PORT: 5000
+
   - name: database
-    image: postgres:15
+    image: postgres:15-alpine
     port: 5432
     env:
-      POSTGRES_PASSWORD: mysecretpassword
-      POSTGRES_USER: myuser
-      POSTGRES_DB: mydb
-
-ingress:
-  enabled: true
-  service: frontend
-  port: 80
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: todos

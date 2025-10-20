@@ -4,6 +4,7 @@ kubeconfig*
 *.pem
 .env
 .coverage
+AWS.md
 
 # Ignore config at root, but allow examples
 .ephemeral-config.yaml

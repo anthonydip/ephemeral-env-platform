@@ -1,0 +1,46 @@
+name: Ephemeral Environment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+jobs:
+  manage-environment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Create Environment
+        if: github.event.action != 'closed'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          LOG_LEVEL: INFO
+          LOG_FILE: ""
+        run: |
+          python automation/main.py create $PR_NUMBER
+
+      - name: Delete Environment
+        if: github.event.action == 'closed'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          LOG_LEVEL: INFO
+          LOG_FILE: ""
+        run: |
+          python automation/main.py delete $PR_NUMBER

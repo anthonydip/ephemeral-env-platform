@@ -10,6 +10,7 @@ Skip with: py test tests/ -v -m "not integration"
 import time
 
 import pytest
+from kubernetes import client
 
 from automation.k8s_client import KubernetesClient
 
@@ -170,3 +171,140 @@ def test_full_environment_creation(k8s_client, test_namespace):
     assert "app" in service_names
 
     k8s_client.delete_namespace(test_namespace)
+
+
+def test_create_middleware(k8s_client, test_namespace):
+    """Test creating a Traefik middleware."""
+    k8s_client.create_namespace(test_namespace)
+
+    result = k8s_client.create_middleware(
+        name="stripprefix",
+        namespace=test_namespace,
+        prefixes=[f"/{test_namespace}"],
+        template_dir="automation/templates/",
+    )
+
+    assert result
+
+    custom_api = client.CustomObjectsApi()
+    try:
+        middleware = custom_api.get_namespaced_custom_object(
+            group="traefik.io",
+            version="v1alpha1",
+            namespace=test_namespace,
+            plural="middlewares",
+            name="stripprefix",
+        )
+        assert middleware["metadata"]["name"] == "stripprefix"
+        assert middleware["spec"]["stripPrefix"]["prefixes"][0] == f"/{test_namespace}"
+    except Exception as e:
+        pytest.fail(f"Middleware not found or invalid: {e}")
+
+
+def test_create_ingress(k8s_client, test_namespace):
+    """Test creating an ingress resource."""
+    k8s_client.create_namespace(test_namespace)
+
+    # Create service to route to
+    k8s_client.create_service(
+        name="test-app",
+        namespace=test_namespace,
+        port=80,
+        target_port=80,
+        template_dir="automation/templates/",
+    )
+
+    # Create middleware
+    k8s_client.create_middleware(
+        name="stripprefix",
+        namespace=test_namespace,
+        prefixes=[f"/{test_namespace}"],
+        template_dir="automation/templates/",
+    )
+
+    # Create ingress
+    result = k8s_client.create_ingress(
+        name=f"{test_namespace}-ingress",
+        namespace=test_namespace,
+        path=f"/{test_namespace}",
+        service_name="test-app",
+        service_port=80,
+        middleware_name="stripprefix",
+        template_dir="automation/templates/",
+    )
+
+    assert result
+
+    # Verify ingress was created
+    networking_v1 = client.NetworkingV1Api()
+    ingress = networking_v1.read_namespaced_ingress(
+        name=f"{test_namespace}-ingress", namespace=test_namespace
+    )
+
+    assert ingress.metadata.name == f"{test_namespace}-ingress"
+    assert ingress.spec.rules[0].http.paths[0].path == f"/{test_namespace}"
+    assert ingress.spec.rules[0].http.paths[0].backend.service.name == "test-app"
+    assert ingress.spec.rules[0].http.paths[0].backend.service.port.number == 80
+
+    # Verify middleware annotation
+    expected_middleware = f"{test_namespace}-stripprefix@kubernetescrd"
+    assert (
+        ingress.metadata.annotations["traefik.ingress.kubernetes.io/router.middlewares"]
+        == expected_middleware
+    )
+
+
+def test_full_stack_with_ingress(k8s_client, test_namespace):
+    """Test creating complete environment with ingress routing."""
+    assert k8s_client.create_namespace(test_namespace)
+
+    # Create deployment
+    assert k8s_client.create_deployment(
+        name="frontend",
+        namespace=test_namespace,
+        image="nginx:latest",
+        port=80,
+        template_dir="automation/templates/",
+        env_vars=None,
+    )
+
+    # Create service
+    assert k8s_client.create_service(
+        name="frontend",
+        namespace=test_namespace,
+        port=80,
+        target_port=80,
+        template_dir="automation/templates/",
+    )
+
+    # Create middleware
+    assert k8s_client.create_middleware(
+        name="stripprefix",
+        namespace=test_namespace,
+        prefixes=[f"/{test_namespace}"],
+        template_dir="automation/templates/",
+    )
+
+    # Create ingress
+    assert k8s_client.create_ingress(
+        name=f"{test_namespace}-frontend-ingress",
+        namespace=test_namespace,
+        path=f"/{test_namespace}/",
+        service_name="frontend",
+        service_port=80,
+        middleware_name="stripprefix",
+        template_dir="automation/templates/",
+    )
+
+    # Verify all resources exist
+    assert k8s_client.namespace_exists(test_namespace)
+
+    deployments = k8s_client.apps_v1.list_namespaced_deployment(test_namespace)
+    assert "frontend" in [d.metadata.name for d in deployments.items]
+
+    services = k8s_client.v1.list_namespaced_service(test_namespace)
+    assert "frontend" in [s.metadata.name for s in services.items]
+
+    networking_v1 = client.NetworkingV1Api()
+    ingresses = networking_v1.list_namespaced_ingress(test_namespace)
+    assert f"{test_namespace}-frontend-ingress" in [i.metadata.name for i in ingresses.items]

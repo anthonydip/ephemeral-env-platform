@@ -6,10 +6,6 @@ kubeconfig*
 .coverage
 AWS.md
 
-# Ignore config at root, but allow examples
-.ephemeral-config.yaml
-!examples/.ephemeral-config.yaml
-
 # Logs
 logs/
 *.log

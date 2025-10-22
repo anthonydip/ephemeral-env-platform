@@ -205,8 +205,10 @@ def create_environment(
                 extra={"namespace": namespace, "service": service["name"], "path": full_path},
             )
 
+    ec2_ip = os.getenv("EC2_PUBLIC_IP", "<EC2-IP>")
+
     if ingress_created:
-        logger.info(f"Preview environment accessible at: http://<EC2-IP>/{namespace}/")
+        logger.info(f"Preview environment accessible at: http://{ec2_ip}/{namespace}/")
     else:
         logger.info("No ingress configured - environment only accessible via port-forward")
 
@@ -216,6 +218,34 @@ def create_environment(
         logger.info(
             f"  kubectl port-forward -n {namespace} svc/{service['name']} {local_port}:{service['port']}"
         )
+
+    # Post/update GitHub comment if integration is enabled
+    if github and ingress_created:
+        try:
+            pr_number = int(namespace.replace("pr-", ""))
+
+            # Build comment message with links to all ingress-enabled services
+            service_links = []
+            for service in config["services"]:
+                if service.get("ingress", {}).get("enabled", False):
+                    service_path = service["ingress"].get("path", "/")
+                    service_url = f"http://{ec2_ip}/{namespace}{service_path}"
+                    service_links.append(f"**{service['name'].title()}:** {service_url}")
+
+            links_text = "\n".join(service_links)
+
+            message = f"""
+            🚀 **Preview Environment Ready!**
+
+            {links_text}
+
+            The environment will be automatically deleted when this PR is closed.
+            """
+
+            github.post_comment(pr_number, message)
+
+        except Exception as e:
+            logger.warning(f"Failed to post GitHub comment: {e}")
 
     return True
 

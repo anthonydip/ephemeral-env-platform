@@ -65,3 +65,69 @@ class GithubClient:
                 "Unexpected error posting comment", extra={"pr_number": pr_number, "error": str(e)}
             )
             return False
+
+    def find_bot_comment(self, pr_number: int) -> int | None:
+        """
+        Find existing comment from the bot on the PR.
+
+        Args:
+            pr_number: Pull request number
+
+        Returns:
+            Comment ID if found, None otherwise
+        """
+        try:
+            pr = self.repo.get_pull(pr_number)
+            comments = pr.get_issue_comments()
+
+            # Search for bot's comment
+            for comment in comments:
+                if "🚀 **Preview Environment Ready!**" in comment.body:
+                    logger.info(
+                        f"Found existing bot comment {comment.id} on PR #{pr_number}",
+                        extra={"pr_number": pr_number, "comment_id": comment.id},
+                    )
+                    return comment.id
+
+            logger.info(f"No existing bot comment found on PR #{pr_number}")
+            return None
+        except GithubException as e:
+            logger.error(
+                f"Failed to search for bot comment on PR #{pr_number}",
+                extra={"pr_number": pr_number, "error": str(e)},
+            )
+            return None
+        except Exception as e:
+            logger.error(
+                "Unexpected error finding comment", extra={"pr_number": pr_number, "error": str(e)}
+            )
+            return None
+
+    def update_comment(self, comment_id: int, message: str) -> bool:
+        """
+        Update an existing comment.
+
+        Args:
+            comment_id: ID of the comment to update
+            message: New message content
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            comment = self.repo.get_issue_comment(comment_id)
+            comment.edit(message)
+            logger.info(f"Updated comment {comment_id}", extra={"comment_id": comment_id})
+            return True
+        except GithubException as e:
+            logger.error(
+                f"Failed to update comment {comment_id}",
+                extra={"comment_id": comment_id, "error": str(e)},
+            )
+            return False
+        except Exception as e:
+            logger.error(
+                f"Unexpected error updating comment {comment_id}",
+                extra={"comment_id": comment_id, "error": str(e)},
+            )
+            return False

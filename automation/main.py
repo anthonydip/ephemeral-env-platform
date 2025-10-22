@@ -234,9 +234,15 @@ def create_environment(
 
             links_text = "\n".join(service_links)
 
-            message = f"🚀 **Preview Environment Ready!**\n{links_text}\nThe environment will be automatically deleted when this PR is closed."
+            message = f"🚀 **Preview Environment Ready!**\n\n{links_text}\n\nThe environment will be automatically deleted when this PR is closed."
 
-            github.post_comment(pr_number, message)
+            # Check if comment already exists
+            existing_comment_id = github.find_bot_comment(pr_number)
+
+            if existing_comment_id:
+                github.update_comment(existing_comment_id, message)
+            else:
+                github.post_comment(pr_number, message)
 
         except Exception as e:
             logger.warning(f"Failed to post GitHub comment: {e}")

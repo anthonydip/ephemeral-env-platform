@@ -115,10 +115,10 @@ def create_environment(
 
     Args:
         k8s: KubernetesClient instance
-        github: GithubClient instance
         namespace: Namespace name (e.g., 'pr-123')
         config_path: Path to configuration file
         template_dir: Path to templates directory
+        github: GithubClient instance
     """
     logger = get_logger(__name__)
 

@@ -10,7 +10,10 @@ import argparse
 import os
 import sys
 
+from dotenv import load_dotenv
+
 from automation.config_parser import load_config
+from automation.github_integration import GithubClient
 from automation.k8s_client import KubernetesClient
 from automation.logger import get_logger, setup_logging
 
@@ -22,6 +25,8 @@ def main() -> None:
     Parses command line arguments and delegates to appropriate handler.
     Exits with code 1 on invalid input.
     """
+    load_dotenv()
+
     parser = argparse.ArgumentParser(description="Manage ephemeral preview environments")
     parser.add_argument("action", choices=["create", "delete"], help="Action to perform")
     parser.add_argument("pr_number", help="Pull request number")
@@ -65,14 +70,29 @@ def main() -> None:
         extra={"action": args.action, "pr_number": args.pr_number, "namespace": namespace},
     )
 
+    # Initialize Kubernetes client
     try:
         k8s = KubernetesClient()
-    except Exception as e:
-        logger.critical(f"Failed to initialize Kubernetes client: {e}")
+    except Exception:
+        logger.critical("Kubernetes client initialization failed")
         sys.exit(1)
 
+    # Initialize GitHub client (optional)
+    github_token = os.getenv("GITHUB_TOKEN")
+    github_repo = os.getenv("GITHUB_REPO")
+
+    if github_token and github_repo:
+        try:
+            github = GithubClient(token=github_token, repo_name=github_repo)
+        except Exception as e:
+            logger.warning(f"GitHub integration disabled: {e}")
+            github = None
+    else:
+        logger.info("GitHub integration disabled - missing GITHUB_TOKEN or GITHUB_REPO")
+        github = None
+
     if args.action == "create":
-        success = create_environment(k8s, namespace, args.config, args.templates)
+        success = create_environment(k8s, namespace, args.config, args.templates, github)
     elif args.action == "delete":
         success = delete_environment(k8s, namespace)
 
@@ -84,13 +104,18 @@ def main() -> None:
 
 
 def create_environment(
-    k8s: KubernetesClient, namespace: str, config_path: str, template_dir: str
+    k8s: KubernetesClient,
+    namespace: str,
+    config_path: str,
+    template_dir: str,
+    github: GithubClient | None = None,
 ) -> bool:
     """
     Create a new ephemeral environment.
 
     Args:
         k8s: KubernetesClient instance
+        github: GithubClient instance
         namespace: Namespace name (e.g., 'pr-123')
         config_path: Path to configuration file
         template_dir: Path to templates directory

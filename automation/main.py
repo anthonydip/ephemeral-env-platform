@@ -118,7 +118,7 @@ def create_environment(
         namespace: Namespace name (e.g., 'pr-123')
         config_path: Path to configuration file
         template_dir: Path to templates directory
-        github: GithubClient instance
+        github: Optional GithubClient instance for PR comments
     """
     logger = get_logger(__name__)
 

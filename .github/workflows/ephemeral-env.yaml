@@ -33,6 +33,9 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           LOG_LEVEL: INFO
           LOG_FILE: ""
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+          EC2_PUBLIC_IP: ${{ secrets.EC2_PUBLIC_IP }}
         run: |
           python automation/main.py create $PR_NUMBER
 

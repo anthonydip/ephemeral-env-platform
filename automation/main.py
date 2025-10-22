@@ -234,13 +234,7 @@ def create_environment(
 
             links_text = "\n".join(service_links)
 
-            message = f"""
-            🚀 **Preview Environment Ready!**
-
-            {links_text}
-
-            The environment will be automatically deleted when this PR is closed.
-            """
+            message = f"🚀 **Preview Environment Ready!**\n{links_text}\nThe environment will be automatically deleted when this PR is closed."
 
             github.post_comment(pr_number, message)
 

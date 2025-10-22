@@ -8,6 +8,7 @@ import re
 
 from kubernetes import client, config, utils
 from kubernetes.client.rest import ApiException
+from kubernetes.utils import FailToCreateError
 from yaml import safe_load
 
 from automation.logger import get_logger
@@ -279,7 +280,21 @@ class KubernetesClient:
                             },
                         )
                         try:
-                            custom_api.replace_namespaced_custom_object(
+                            # Fetch the current object
+                            current = custom_api.get_namespaced_custom_object(
+                                group=group,
+                                version=version,
+                                namespace=namespace,
+                                plural=plural,
+                                name=resource_name,
+                            )
+
+                            # Inject the resourceVersion
+                            manifest["metadata"]["resourceVersion"] = current["metadata"][
+                                "resourceVersion"
+                            ]
+
+                            custom_api.patch_namespaced_custom_object(
                                 group=group,
                                 version=version,
                                 namespace=namespace,
@@ -325,9 +340,31 @@ class KubernetesClient:
                     extra={"kind": kind, "resource_name": resource_name, "namespace": namespace},
                 )
                 return True
+            except FailToCreateError as e:
+                msg = str(e)
+                if "AlreadyExists" in msg or "Conflict" in msg:
+                    logger.info(
+                        f"{kind} {resource_name} already exists, updating...",
+                        extra={
+                            "kind": kind,
+                            "resource_name": resource_name,
+                            "namespace": namespace,
+                        },
+                    )
+                    return self._update_resource(manifest, namespace, kind, resource_name)
+                else:
+                    logger.error(
+                        f"Failed to create {kind}: {e}",
+                        extra={
+                            "kind": kind,
+                            "resource_name": resource_name,
+                            "namespace": namespace,
+                        },
+                    )
+                    return False
+
             except ApiException as e:
                 if e.status == 409:
-                    # Already exists, update
                     logger.info(
                         f"{kind} {resource_name} already exists, updating...",
                         extra={

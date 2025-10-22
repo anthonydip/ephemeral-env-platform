@@ -184,14 +184,14 @@ class KubernetesClient:
         """
         try:
             if kind == "Deployment":
-                self.apps_v1.replace_namespaced_deployment(
+                self.apps_v1.patch_namespaced_deployment(
                     name=name, namespace=namespace, body=manifest
                 )
             elif kind == "Service":
-                self.v1.replace_namespaced_service(name=name, namespace=namespace, body=manifest)
+                self.v1.patch_namespaced_service(name=name, namespace=namespace, body=manifest)
             elif kind == "Ingress":
                 networking_v1 = client.NetworkingV1Api()
-                networking_v1.replace_namespaced_ingress(
+                networking_v1.patch_namespaced_ingress(
                     name=name, namespace=namespace, body=manifest
                 )
             else:

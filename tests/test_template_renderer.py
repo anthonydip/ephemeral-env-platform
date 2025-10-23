@@ -4,10 +4,8 @@ Tests for template_renderer.py
 
 from automation.template_renderer import render_template
 
-TEMPLATE_DIR = "tests/fixtures/template_renderer/"
 
-
-def test_render_deployment_template_with_valid_data():
+def test_render_deployment_template_with_valid_data(template_dir):
     """Test rendering deployment template with valid data."""
     data = {
         "name": "test-app",
@@ -17,7 +15,7 @@ def test_render_deployment_template_with_valid_data():
         "env_vars": None,
     }
 
-    result = render_template("deployment.yaml.j2", data, TEMPLATE_DIR)
+    result = render_template("deployment.yaml.j2", data, template_dir)
 
     assert result is not None
 
@@ -32,7 +30,7 @@ def test_render_deployment_template_with_valid_data():
     assert "env:" not in result
 
 
-def test_render_deployment_with_env_vars():
+def test_render_deployment_with_env_vars(template_dir):
     """Test rendering deployment template with environment variables."""
     data = {
         "name": "test-database",
@@ -44,7 +42,7 @@ def test_render_deployment_with_env_vars():
         },
     }
 
-    result = render_template("deployment.yaml.j2", data, TEMPLATE_DIR)
+    result = render_template("deployment.yaml.j2", data, template_dir)
 
     assert result is not None
 
@@ -61,11 +59,11 @@ def test_render_deployment_with_env_vars():
     assert 'value: "secret"' in result
 
 
-def test_render_service_with_valid_data():
+def test_render_service_with_valid_data(template_dir):
     """Test rendering service template with valid data."""
     data = {"name": "test-service", "namespace": "test-namespace", "port": 30, "target_port": 80}
 
-    result = render_template("service.yaml.j2", data, TEMPLATE_DIR)
+    result = render_template("service.yaml.j2", data, template_dir)
 
     assert result is not None
 
@@ -78,7 +76,7 @@ def test_render_service_with_valid_data():
     assert "kind: Service" in result
 
 
-def test_render_template_with_missing_file():
+def test_render_template_with_missing_file(template_dir):
     """Test handling of missing template file."""
     data = {
         "name": "test-app",
@@ -88,25 +86,25 @@ def test_render_template_with_missing_file():
         "env_vars": None,
     }
 
-    result = render_template("missing.yaml.j2", data, TEMPLATE_DIR)
+    result = render_template("missing.yaml.j2", data, template_dir)
 
     assert result is None
 
 
-def test_render_template_with_missing_variable():
+def test_render_template_with_missing_variable(template_dir):
     """Test handling of missing required template variable."""
     data = {"namespace": "test-namespace", "image": "nginx:latest", "port": 80, "env_vars": None}
 
-    result = render_template("deployment.yaml.j2", data, TEMPLATE_DIR)
+    result = render_template("deployment.yaml.j2", data, template_dir)
 
     assert result is None
 
 
-def test_render_middleware_template():
+def test_render_middleware_template(template_dir):
     """Test rendering middleware template with valid data."""
     data = {"name": "stripprefix", "namespace": "pr-123", "prefixes": ["/pr-123", "/api"]}
 
-    result = render_template("middleware.yaml.j2", data, TEMPLATE_DIR)
+    result = render_template("middleware.yaml.j2", data, template_dir)
 
     assert result is not None
     assert "name: stripprefix" in result
@@ -118,18 +116,18 @@ def test_render_middleware_template():
     assert "- /api" in result
 
 
-def test_render_middleware_template_single_prefix():
+def test_render_middleware_template_single_prefix(template_dir):
     """Test rendering middleware template with single prefix."""
     data = {"name": "stripprefix", "namespace": "pr-999", "prefixes": ["/pr-999"]}
 
-    result = render_template("middleware.yaml.j2", data, TEMPLATE_DIR)
+    result = render_template("middleware.yaml.j2", data, template_dir)
 
     assert result is not None
     assert "- /pr-999" in result
     assert result.count("- /pr-") == 1
 
 
-def test_render_ingress_template():
+def test_render_ingress_template(template_dir):
     """Test rendering ingress template with valid data."""
     data = {
         "name": "test-ingress",
@@ -140,7 +138,7 @@ def test_render_ingress_template():
         "middleware_name": "stripprefix",
     }
 
-    result = render_template("ingress.yaml.j2", data, TEMPLATE_DIR)
+    result = render_template("ingress.yaml.j2", data, template_dir)
 
     assert result is not None
     assert "name: test-ingress" in result
@@ -160,7 +158,7 @@ def test_render_ingress_template():
     assert "number: 80" in result
 
 
-def test_render_ingress_different_service_port():
+def test_render_ingress_different_service_port(template_dir):
     """Test rendering ingress template with different service port."""
     data = {
         "name": "backend-ingress",
@@ -171,7 +169,7 @@ def test_render_ingress_different_service_port():
         "middleware_name": "stripprefix",
     }
 
-    result = render_template("ingress.yaml.j2", data, TEMPLATE_DIR)
+    result = render_template("ingress.yaml.j2", data, template_dir)
 
     assert result is not None
     assert "name: backend-ingress" in result

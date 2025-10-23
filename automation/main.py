@@ -10,7 +10,10 @@ import argparse
 import os
 import sys
 
+from dotenv import load_dotenv
+
 from automation.config_parser import load_config
+from automation.github_integration import GithubClient
 from automation.k8s_client import KubernetesClient
 from automation.logger import get_logger, setup_logging
 
@@ -22,6 +25,8 @@ def main() -> None:
     Parses command line arguments and delegates to appropriate handler.
     Exits with code 1 on invalid input.
     """
+    load_dotenv()
+
     parser = argparse.ArgumentParser(description="Manage ephemeral preview environments")
     parser.add_argument("action", choices=["create", "delete"], help="Action to perform")
     parser.add_argument("pr_number", help="Pull request number")
@@ -65,14 +70,29 @@ def main() -> None:
         extra={"action": args.action, "pr_number": args.pr_number, "namespace": namespace},
     )
 
+    # Initialize Kubernetes client
     try:
         k8s = KubernetesClient()
-    except Exception as e:
-        logger.critical(f"Failed to initialize Kubernetes client: {e}")
+    except Exception:
+        logger.critical("Kubernetes client initialization failed")
         sys.exit(1)
 
+    # Initialize GitHub client (optional)
+    github_token = os.getenv("GITHUB_TOKEN")
+    github_repo = os.getenv("GITHUB_REPO")
+
+    if github_token and github_repo:
+        try:
+            github = GithubClient(token=github_token, repo_name=github_repo)
+        except Exception as e:
+            logger.warning(f"GitHub integration disabled: {e}")
+            github = None
+    else:
+        logger.info("GitHub integration disabled - missing GITHUB_TOKEN or GITHUB_REPO")
+        github = None
+
     if args.action == "create":
-        success = create_environment(k8s, namespace, args.config, args.templates)
+        success = create_environment(k8s, namespace, args.config, args.templates, github)
     elif args.action == "delete":
         success = delete_environment(k8s, namespace)
 
@@ -84,7 +104,11 @@ def main() -> None:
 
 
 def create_environment(
-    k8s: KubernetesClient, namespace: str, config_path: str, template_dir: str
+    k8s: KubernetesClient,
+    namespace: str,
+    config_path: str,
+    template_dir: str,
+    github: GithubClient | None = None,
 ) -> bool:
     """
     Create a new ephemeral environment.
@@ -94,6 +118,7 @@ def create_environment(
         namespace: Namespace name (e.g., 'pr-123')
         config_path: Path to configuration file
         template_dir: Path to templates directory
+        github: Optional GithubClient instance for PR comments
     """
     logger = get_logger(__name__)
 
@@ -180,8 +205,10 @@ def create_environment(
                 extra={"namespace": namespace, "service": service["name"], "path": full_path},
             )
 
+    ec2_ip = os.getenv("EC2_PUBLIC_IP", "<EC2-IP>")
+
     if ingress_created:
-        logger.info(f"Preview environment accessible at: http://<EC2-IP>/{namespace}/")
+        logger.info(f"Preview environment accessible at: http://{ec2_ip}/{namespace}/")
     else:
         logger.info("No ingress configured - environment only accessible via port-forward")
 
@@ -191,6 +218,34 @@ def create_environment(
         logger.info(
             f"  kubectl port-forward -n {namespace} svc/{service['name']} {local_port}:{service['port']}"
         )
+
+    # Post/update GitHub comment if integration is enabled
+    if github and ingress_created:
+        try:
+            pr_number = int(namespace.replace("pr-", ""))
+
+            # Build comment message with links to all ingress-enabled services
+            service_links = []
+            for service in config["services"]:
+                if service.get("ingress", {}).get("enabled", False):
+                    service_path = service["ingress"].get("path", "/")
+                    service_url = f"http://{ec2_ip}/{namespace}{service_path}"
+                    service_links.append(f"**{service['name'].title()}:** {service_url}")
+
+            links_text = "\n".join(service_links)
+
+            message = f"🚀 **Preview Environment Ready!**\n\n{links_text}\n\nThe environment will be automatically deleted when this PR is closed."
+
+            # Check if comment already exists
+            existing_comment_id = github.find_bot_comment(pr_number)
+
+            if existing_comment_id:
+                github.update_comment(pr_number, existing_comment_id, message)
+            else:
+                github.post_comment(pr_number, message)
+
+        except Exception as e:
+            logger.warning(f"Failed to post GitHub comment: {e}")
 
     return True
 

@@ -240,7 +240,7 @@ def create_environment(
             existing_comment_id = github.find_bot_comment(pr_number)
 
             if existing_comment_id:
-                github.update_comment(existing_comment_id, message)
+                github.update_comment(pr_number, existing_comment_id, message)
             else:
                 github.post_comment(pr_number, message)
 

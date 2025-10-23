@@ -103,11 +103,12 @@ class GithubClient:
             )
             return None
 
-    def update_comment(self, comment_id: int, message: str) -> bool:
+    def update_comment(self, pr_number: int, comment_id: int, message: str) -> bool:
         """
         Update an existing comment.
 
         Args:
+            pr_number: Pull request number
             comment_id: ID of the comment to update
             message: New message content
 
@@ -115,19 +116,23 @@ class GithubClient:
             True if successful, False otherwise
         """
         try:
-            comment = self.repo.get_issue_comment(comment_id)
+            pr = self.repo.get_pull(pr_number)
+            comment = pr.get_issue_comment(comment_id)
             comment.edit(message)
-            logger.info(f"Updated comment {comment_id}", extra={"comment_id": comment_id})
+            logger.info(
+                f"Updated comment {comment_id} on PR #{pr_number}",
+                extra={"comment_id": comment_id, "pr_number": pr_number},
+            )
             return True
         except GithubException as e:
             logger.error(
-                f"Failed to update comment {comment_id}",
-                extra={"comment_id": comment_id, "error": str(e)},
+                f"Failed to update comment {comment_id} on PR #{pr_number}",
+                extra={"comment_id": comment_id, "pr_number": pr_number, "error": str(e)},
             )
             return False
         except Exception as e:
             logger.error(
-                f"Unexpected error updating comment {comment_id}",
-                extra={"comment_id": comment_id, "error": str(e)},
+                f"Unexpected error updating comment {comment_id} on PR #{pr_number}: {e}",
+                extra={"comment_id": comment_id, "pr_number": pr_number, "error": str(e)},
             )
             return False

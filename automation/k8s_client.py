@@ -356,31 +356,15 @@ class KubernetesClient:
                 extra={"kind": kind, "resource_name": resource_name, "namespace": namespace},
             )
             return True
-        except FailToCreateError as e:
-            error_msg = str(e)
-            if "AlreadyExists" in error_msg or "Conflict" in error_msg:
-                logger.info(
-                    f"{kind} {resource_name} already exists, updating...",
-                    extra={
-                        "kind": kind,
-                        "resource_name": resource_name,
-                        "namespace": namespace,
-                    },
-                )
-                return self._update_standard_resource(manifest, namespace, kind, resource_name)
-            else:
-                logger.error(
-                    f"Failed to create {kind}: {e}",
-                    extra={
-                        "kind": kind,
-                        "resource_name": resource_name,
-                        "namespace": namespace,
-                    },
-                )
-                return False
-        except ApiException as e:
-            if e.status == 409:
-                # Resource already exists, update it
+        except (FailToCreateError, ApiException) as e:
+            is_conflict = False
+
+            if isinstance(e, FailToCreateError):
+                is_conflict = "AlreadyExists" in str(e) or "Conflict" in str(e)
+            elif isinstance(e, ApiException):
+                is_conflict = e.status == 409
+
+            if is_conflict:
                 logger.info(
                     f"{kind} {resource_name} already exists, updating...",
                     extra={

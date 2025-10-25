@@ -244,6 +244,274 @@ class KubernetesClient:
             logger.error(f"Error parsing YAML: {e}", extra={"namespace": namespace})
             return None
 
+    def _is_traefik_crd(self, manifest: dict) -> bool:
+        """
+        Check if manifest is a Traefik Custom Resource Definition.
+
+        Args:
+            manifest: Parsed Kubernetes manifest
+
+        Returns:
+            True if Traefik CRD, False otherwise
+        """
+        api_version = manifest.get("apiVersion", "")
+        return "traefik.io" in api_version or "traefik.containo.us" in api_version
+
+    def _apply_traefik_crd(self, manifest: dict, namespace: str) -> bool:
+        """
+        Apply Traefik Custom Resource with create-or-update logic.
+
+        Args:
+            manifest: Traefik CRD manifest
+            namespace: Namespace to apply to
+
+        Returns:
+            True if successful, False otherwise
+        """
+        kind = manifest.get("kind", "Resource")
+        api_version = manifest.get("apiVersion", "")
+        resource_name = manifest.get("metadata", {}).get("name", "unknown")
+
+        try:
+            custom_api = client.CustomObjectsApi()
+            group, version = api_version.split("/")
+            plural = kind.lower() + "s"
+
+            # Try to create the resource
+            try:
+                custom_api.create_namespaced_custom_object(
+                    group=group,
+                    version=version,
+                    namespace=namespace,
+                    plural=plural,
+                    body=manifest,
+                )
+                logger.info(
+                    f"Created {kind}: {resource_name}",
+                    extra={
+                        "kind": kind,
+                        "resource_name": resource_name,
+                        "namespace": namespace,
+                    },
+                )
+                return True
+            except ApiException as e:
+                if e.status == 409:
+                    # Resource already exists, update it
+                    return self._update_traefik_crd(
+                        custom_api, group, version, namespace, plural, resource_name, manifest
+                    )
+                else:
+                    logger.error(
+                        f"Kubernetes API error creating {kind}",
+                        extra={
+                            "kind": kind,
+                            "resource_name": resource_name,
+                            "namespace": namespace,
+                        },
+                    )
+                    return False
+        except Exception as e:
+            logger.error(
+                f"Error applying Traefik CRD: {e}", extra={"kind": kind, "namespace": namespace}
+            )
+            return False
+
+    def _update_traefik_crd(
+        self,
+        custom_api: client.CustomObjectsApi,
+        group: str,
+        version: str,
+        namespace: str,
+        plural: str,
+        name: str,
+        manifest: dict,
+    ) -> bool:
+        """
+        Update an existing Traefik CRD with proper resourceVersion.
+
+        Args:
+            custom_api: CustomObjectsApi instance
+            group: API group
+            version: API version
+            namespace: Namespace
+            plural: Resource plural name
+            name: Resource name
+            manifest: Updated manifest
+
+        Returns:
+            True if successful, False otherwise
+        """
+        kind = manifest.get("kind", "Resource")
+
+        try:
+            logger.info(
+                f"{kind} {name} already exists, updating...",
+                extra={"kind": kind, "resource_name": name, "namespace": namespace},
+            )
+
+            # Fetch current resource to get resourceVersion
+            current = custom_api.get_namespaced_custom_object(
+                group=group,
+                version=version,
+                namespace=namespace,
+                plural=plural,
+                name=name,
+            )
+
+            # Inject resourceVersion for update
+            manifest["metadata"]["resourceVersion"] = current["metadata"]["resourceVersion"]
+
+            # Perform the update
+            custom_api.patch_namespaced_custom_object(
+                group=group,
+                version=version,
+                namespace=namespace,
+                plural=plural,
+                name=name,
+                body=manifest,
+            )
+
+            logger.info(
+                f"Updated {kind}: {name}",
+                extra={"kind": kind, "resource_name": name, "namespace": namespace},
+            )
+            return True
+        except ApiException as e:
+            logger.error(
+                f"Failed to update {kind}: {e}",
+                extra={"kind": kind, "resource_name": name, "namespace": namespace},
+            )
+            return False
+
+    def _apply_standard_resource(self, manifest: dict, namespace: str) -> bool:
+        """
+        Apply standard Kubernetes resource with create-or-update logic.
+
+        Handles Deployments, Services, Ingress, etc.
+
+        Args:
+            manifest: Kubernetes resource manifest
+            namespace: Namespace to apply to
+
+        Returns:
+            True if successful, False otherwise
+        """
+        kind = manifest.get("kind", "Resource")
+        resource_name = manifest.get("metadata", {}).get("name", "unknown")
+
+        try:
+            # Try to create the resource
+            utils.create_from_dict(self.v1.api_client, manifest)
+            logger.info(
+                f"Created {kind}: {resource_name}",
+                extra={"kind": kind, "resource_name": resource_name, "namespace": namespace},
+            )
+            return True
+        except FailToCreateError as e:
+            error_msg = str(e)
+            if "AlreadyExists" in error_msg or "Conflict" in error_msg:
+                logger.info(
+                    f"{kind} {resource_name} already exists, updating...",
+                    extra={
+                        "kind": kind,
+                        "resource_name": resource_name,
+                        "namespace": namespace,
+                    },
+                )
+                return self._update_standard_resource(manifest, namespace, kind, resource_name)
+            else:
+                logger.error(
+                    f"Failed to create {kind}: {e}",
+                    extra={
+                        "kind": kind,
+                        "resource_name": resource_name,
+                        "namespace": namespace,
+                    },
+                )
+                return False
+        except ApiException as e:
+            if e.status == 409:
+                # Resource already exists, update it
+                logger.info(
+                    f"{kind} {resource_name} already exists, updating...",
+                    extra={
+                        "kind": kind,
+                        "resource_name": resource_name,
+                        "namespace": namespace,
+                    },
+                )
+                return self._update_standard_resource(manifest, namespace, kind, resource_name)
+            else:
+                logger.error(
+                    "Kubernetes API error applying YAML",
+                    extra={
+                        "kind": kind,
+                        "namespace": namespace,
+                        "status": e.status,
+                        "reason": e.reason,
+                    },
+                )
+                return False
+        except Exception as e:
+            logger.error(
+                f"Error applying {kind}: {e}", extra={"kind": kind, "namespace": namespace}
+            )
+            return False
+
+    def _update_standard_resource(
+        self, manifest: dict, namespace: str, kind: str, name: str
+    ) -> bool:
+        """
+        Update an existing standard Kubernetes resource.
+
+        Routes to the appropriate API method based on resource kind.
+
+        Args:
+            manifest: Resource manifest dict
+            namespace: Namespace
+            kind: Resource kind (Deployment, Service, Ingress, etc.)
+            name: Resource name
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            if kind == "Deployment":
+                self.apps_v1.patch_namespaced_deployment(
+                    name=name, namespace=namespace, body=manifest
+                )
+            elif kind == "Service":
+                self.apps_v1.patch_namespaced_service(name=name, namespace=namespace, body=manifest)
+            elif kind == "Ingress":
+                networking_v1 = client.NetworkingV1Api()
+                networking_v1.patch_namespaced_ingress(
+                    name=name, namespace=namespace, body=manifest
+                )
+            else:
+                logger.warning(
+                    f"Update not implemented for kind: {kind}",
+                    extra={"kind": kind, "resource_name": name, "namespace": namespace},
+                )
+                return False
+
+            logger.info(
+                f"Updated {kind}: {name}",
+                extra={"kind": kind, "resource_name": name, "namespace": namespace},
+            )
+            return True
+        except ApiException as e:
+            logger.error(
+                f"Failed to update {kind}",
+                extra={
+                    "kind": kind,
+                    "resource_name": name,
+                    "namespace": namespace,
+                    "status": e.status,
+                },
+            )
+            return False
+
     def _apply_yaml(self, yaml_content: str, namespace: str) -> bool:
         """
         Apply YAML manifest to Kubernetes cluster.
@@ -257,158 +525,15 @@ class KubernetesClient:
         Returns:
             True if successful, False otherwise
         """
-        try:
-            manifest = self._parse_yaml_manifest(yaml_content, namespace)
-            if not manifest:
-                return False
-
-            kind = manifest.get("kind", "Resource")
-            api_version = manifest.get("apiVersion", "")
-            resource_name = manifest.get("metadata", {}).get("name", "unknown")
-
-            # Handle Traefik CRDs (Middleware, IngressRoute, etc.)
-            if "traefik.io" in api_version or "traefik.containo.us" in api_version:
-                custom_api = client.CustomObjectsApi()
-                group, version = api_version.split("/")
-                plural = kind.lower() + "s"
-
-                try:
-                    custom_api.create_namespaced_custom_object(
-                        group=group,
-                        version=version,
-                        namespace=namespace,
-                        plural=plural,
-                        body=manifest,
-                    )
-                    logger.info(
-                        f"Created {kind}: {resource_name}",
-                        extra={
-                            "kind": kind,
-                            "resource_name": resource_name,
-                            "namespace": namespace,
-                        },
-                    )
-                    return True
-                except ApiException as e:
-                    if e.status == 409:
-                        # Already exists, update instead
-                        logger.info(
-                            f"{kind} {resource_name} already exists, updating...",
-                            extra={
-                                "kind": kind,
-                                "resource_name": resource_name,
-                                "namespace": namespace,
-                            },
-                        )
-                        try:
-                            # Fetch the current object
-                            current = custom_api.get_namespaced_custom_object(
-                                group=group,
-                                version=version,
-                                namespace=namespace,
-                                plural=plural,
-                                name=resource_name,
-                            )
-
-                            # Inject the resourceVersion
-                            manifest["metadata"]["resourceVersion"] = current["metadata"][
-                                "resourceVersion"
-                            ]
-
-                            custom_api.patch_namespaced_custom_object(
-                                group=group,
-                                version=version,
-                                namespace=namespace,
-                                plural=plural,
-                                name=resource_name,
-                                body=manifest,
-                            )
-                            logger.info(
-                                f"Updated {kind}: {resource_name}",
-                                extra={
-                                    "kind": kind,
-                                    "resource_name": resource_name,
-                                    "namespace": namespace,
-                                },
-                            )
-                            return True
-                        except ApiException as update_error:
-                            logger.error(
-                                f"Failed to update {kind}: {update_error}",
-                                extra={
-                                    "kind": kind,
-                                    "resource_name": resource_name,
-                                    "namespace": namespace,
-                                },
-                            )
-                            return False
-                    else:
-                        logger.error(
-                            f"Kubernetes API error creating {kind}",
-                            extra={
-                                "kind": kind,
-                                "resource_name": resource_name,
-                                "namespace": namespace,
-                            },
-                        )
-                        return False
-
-            # Handle standard Kubernetes resources (Deployments, Services, Ingress)
-            try:
-                utils.create_from_dict(self.v1.api_client, manifest)
-                logger.info(
-                    f"Created {kind}: {resource_name}",
-                    extra={"kind": kind, "resource_name": resource_name, "namespace": namespace},
-                )
-                return True
-            except FailToCreateError as e:
-                msg = str(e)
-                if "AlreadyExists" in msg or "Conflict" in msg:
-                    logger.info(
-                        f"{kind} {resource_name} already exists, updating...",
-                        extra={
-                            "kind": kind,
-                            "resource_name": resource_name,
-                            "namespace": namespace,
-                        },
-                    )
-                    return self._update_resource(manifest, namespace, kind, resource_name)
-                else:
-                    logger.error(
-                        f"Failed to create {kind}: {e}",
-                        extra={
-                            "kind": kind,
-                            "resource_name": resource_name,
-                            "namespace": namespace,
-                        },
-                    )
-                    return False
-
-            except ApiException as e:
-                if e.status == 409:
-                    logger.info(
-                        f"{kind} {resource_name} already exists, updating...",
-                        extra={
-                            "kind": kind,
-                            "resource_name": resource_name,
-                            "namespace": namespace,
-                        },
-                    )
-                    return self._update_resource(manifest, namespace, kind, resource_name)
-                else:
-                    logger.error(
-                        "Kubernetes API error applying YAML",
-                        extra={
-                            "kind": kind,
-                            "namespace": namespace,
-                            "status": e.status,
-                            "reason": e.reason,
-                        },
-                    )
-                    return False
-        except Exception as e:
-            logger.error(f"Error parsing or applying YAML: {e}", extra={"namespace": namespace})
+        manifest = self._parse_yaml_manifest(yaml_content, namespace)
+        if not manifest:
             return False
+
+        # Route to appropriate handler based on resource type
+        if self._is_traefik_crd(manifest):
+            return self._apply_traefik_crd(manifest, namespace)
+        else:
+            return self._apply_standard_resource(manifest, namespace)
 
     def create_namespace(self, name: str) -> bool:
         """

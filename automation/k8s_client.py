@@ -220,11 +220,35 @@ class KubernetesClient:
             )
             return False
 
+    def _parse_yaml_manifest(self, yaml_content: str, namespace: str) -> dict | None:
+        """
+        Parse YAML content and ensure namespace is set.
+
+        Args:
+            yaml_content: YAML string to parse
+            namespace: Namespace to set in manifest
+
+        Returns:
+            Parsed manifest dict, or None on error
+        """
+        try:
+            manifest = safe_load(yaml_content)
+
+            # Ensure namespace is set in metadata
+            if "metadata" not in manifest:
+                manifest["metadata"] = {}
+            manifest["metadata"]["namespace"] = namespace
+
+            return manifest
+        except Exception as e:
+            logger.error(f"Error parsing YAML: {e}", extra={"namespace": namespace})
+            return None
+
     def _apply_yaml(self, yaml_content: str, namespace: str) -> bool:
         """
         Apply YAML manifest to Kubernetes cluster.
 
-        Implements create-or-update logic: tries to create, updates if exists.
+        Main orchestration method that delegates to specific handlers.
 
         Args:
             yaml_content: YAML string to apply
@@ -234,12 +258,9 @@ class KubernetesClient:
             True if successful, False otherwise
         """
         try:
-            manifest = safe_load(yaml_content)
-
-            # Ensure namespace is set in metadata
-            if "metadata" not in manifest:
-                manifest["metadata"] = {}
-            manifest["metadata"]["namespace"] = namespace
+            manifest = self._parse_yaml_manifest(yaml_content, namespace)
+            if not manifest:
+                return False
 
             kind = manifest.get("kind", "Resource")
             api_version = manifest.get("apiVersion", "")

@@ -168,58 +168,6 @@ class KubernetesClient:
         logger.debug(f"Validated port: {port}")
         return True, None
 
-    def _update_resource(self, manifest: dict, namespace: str, kind: str, name: str) -> bool:
-        """
-        Update an existing Kubernetes resource.
-
-        Routes to the appropriate API method based on resource kind.
-
-        Args:
-            manifest: Resource manifest dict
-            namespace: Namespace
-            kind: Resource kind (Deployment, Service, Ingress, etc.)
-            name: Resource name
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            if kind == "Deployment":
-                self.apps_v1.patch_namespaced_deployment(
-                    name=name, namespace=namespace, body=manifest
-                )
-            elif kind == "Service":
-                self.v1.patch_namespaced_service(name=name, namespace=namespace, body=manifest)
-            elif kind == "Ingress":
-                networking_v1 = client.NetworkingV1Api()
-                networking_v1.patch_namespaced_ingress(
-                    name=name, namespace=namespace, body=manifest
-                )
-            else:
-                logger.warning(
-                    f"Update not implemented for kind: {kind}",
-                    extra={"kind": kind, "resource_name": name, "namespace": namespace},
-                )
-                return False
-
-            logger.info(
-                f"Updated {kind}: {name}",
-                extra={"kind": kind, "resource_name": name, "namespace": namespace},
-            )
-            return True
-
-        except ApiException as e:
-            logger.error(
-                f"Failed to update {kind}",
-                extra={
-                    "kind": kind,
-                    "resource_name": name,
-                    "namespace": namespace,
-                    "status": e.status,
-                },
-            )
-            return False
-
     def _parse_yaml_manifest(self, yaml_content: str, namespace: str) -> dict | None:
         """
         Parse YAML content and ensure namespace is set.
@@ -482,7 +430,7 @@ class KubernetesClient:
                     name=name, namespace=namespace, body=manifest
                 )
             elif kind == "Service":
-                self.apps_v1.patch_namespaced_service(name=name, namespace=namespace, body=manifest)
+                self.v1.patch_namespaced_service(name=name, namespace=namespace, body=manifest)
             elif kind == "Ingress":
                 networking_v1 = client.NetworkingV1Api()
                 networking_v1.patch_namespaced_ingress(

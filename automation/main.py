@@ -13,6 +13,7 @@ import sys
 from dotenv import load_dotenv
 
 from automation.config_parser import load_config
+from automation.exception import ConfigError
 from automation.github_integration import GithubClient
 from automation.k8s_client import KubernetesClient
 from automation.logger import get_logger, setup_logging
@@ -125,8 +126,10 @@ def create_environment(
     logger.info(f"Creating environment: {namespace}", extra={"namespace": namespace})
 
     # Load YAML configuration file
-    config = load_config(config_path)
-    if not config:
+    try:
+        config = load_config(config_path)
+    except ConfigError as e:
+        logger.error(str(e))
         return False
 
     # Create namespace

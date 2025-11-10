@@ -11,6 +11,7 @@ from kubernetes.client.rest import ApiException
 from kubernetes.utils import FailToCreateError
 from yaml import safe_load
 
+from automation.exceptions import TemplateError
 from automation.logger import get_logger
 from automation.template_renderer import render_template
 
@@ -619,8 +620,10 @@ class KubernetesClient:
             "env_vars": env_vars,
         }
 
-        yaml_content = render_template("deployment.yaml.j2", data, template_dir)
-        if not yaml_content:
+        try:
+            yaml_content = render_template("deployment.yaml.j2", data, template_dir)
+        except TemplateError as e:
+            logger.error(str(e))
             return False
 
         return self._apply_yaml(yaml_content, namespace)
@@ -673,8 +676,10 @@ class KubernetesClient:
 
         data = {"name": name, "namespace": namespace, "port": port, "target_port": target_port}
 
-        yaml_content = render_template("service.yaml.j2", data, template_dir)
-        if not yaml_content:
+        try:
+            yaml_content = render_template("service.yaml.j2", data, template_dir)
+        except TemplateError as e:
+            logger.error(str(e))
             return False
 
         return self._apply_yaml(yaml_content, namespace)
@@ -709,8 +714,10 @@ class KubernetesClient:
 
         data = {"name": name, "namespace": namespace, "prefixes": prefixes}
 
-        yaml_content = render_template("middleware.yaml.j2", data, template_dir)
-        if not yaml_content:
+        try:
+            yaml_content = render_template("middleware.yaml.j2", data, template_dir)
+        except TemplateError as e:
+            logger.error(str(e))
             return False
 
         return self._apply_yaml(yaml_content, namespace)
@@ -772,8 +779,10 @@ class KubernetesClient:
             "middleware_name": middleware_name,
         }
 
-        yaml_content = render_template("ingress.yaml.j2", data, template_dir)
-        if not yaml_content:
+        try:
+            yaml_content = render_template("ingress.yaml.j2", data, template_dir)
+        except TemplateError as e:
+            logger.error(str(e))
             return False
 
         return self._apply_yaml(yaml_content, namespace)

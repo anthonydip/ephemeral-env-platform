@@ -13,7 +13,7 @@ import sys
 from dotenv import load_dotenv
 
 from automation.config_parser import load_config
-from automation.exception import ConfigError
+from automation.exceptions import ConfigError
 from automation.github_integration import GithubClient
 from automation.k8s_client import KubernetesClient
 from automation.logger import get_logger, setup_logging

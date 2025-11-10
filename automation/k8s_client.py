@@ -11,7 +11,7 @@ from kubernetes.client.rest import ApiException
 from kubernetes.utils import FailToCreateError
 from yaml import safe_load
 
-from automation.exceptions import TemplateError
+from automation.exceptions import TemplateError, ValidationError
 from automation.logger import get_logger
 from automation.template_renderer import render_template
 
@@ -37,9 +37,7 @@ class KubernetesClient:
             logger.critical(f"Failed to initialize Kubernetes client: {e}")
             raise
 
-    def _validate_k8s_name(
-        self, name: str, resource_type: str = "resource"
-    ) -> tuple[bool, str | None]:
+    def _validate_k8s_name(self, name: str, resource_type: str = "resource") -> None:
         """
         Validate Kubernetes resource name (works for namespaces, deployments, services, etc.)
 
@@ -47,33 +45,28 @@ class KubernetesClient:
             name: Name to validate
             resource_type: Type of resource for error messages (e.g., "namespace", "deployment", etc.)
 
-        Returns:
-            tuple: (is_valid: bool, error_message: str or None)
+        Raises:
+            ValidationError: If name is invalid
         """
         if not name:
-            error = f"{resource_type.capitalize()} name cannot be empty"
-            logger.error(error)
-            return False, error
+            raise ValidationError(f"{resource_type.capitalize()} name cannot be empty")
 
         if len(name) > 63:
-            error = f"{resource_type.capitalize()} name too long (max 63 chars, got {len(name)})"
-            logger.error(error, extra={"resource_name": name, "length": len(name)})
-            return False, error
+            raise ValidationError(
+                f"{resource_type.capitalize()} name too long (max 63 chars, got {len(name)})"
+            )
 
         # Lowercase alphanumeric + hyphens, start/end with alphanumeric
         pattern = r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
         if not re.match(pattern, name):
-            error = (
+            raise ValidationError(
                 f"Invalid {resource_type} name. Must be lowercase letters, numbers, "
                 "and hyphens only. Must start and end with alphanumeric character."
             )
-            logger.error(error, extra={"resource_name": name})
-            return False, error
 
         logger.debug(f"Validated {resource_type} name: {name}")
-        return True, None
 
-    def _validate_image_name(self, image: str) -> tuple[bool, str | None]:
+    def _validate_image_name(self, image: str) -> None:
         """
         Validate Docker image format according to OCI specification.
 
@@ -85,35 +78,27 @@ class KubernetesClient:
         Args:
             image: Full image string (registry/name:tag or name:tag)
 
-        Returns:
-            tuple: (is_valid: bool, error_message: str or None)
+        Raises:
+            ValidationError: If image is invalid
         """
         if not image:
-            error = "Image name cannot be empty"
-            logger.error(error, extra={"image": image})
-            return False, error
+            raise ValidationError("Image name cannot be empty")
 
         if ":" not in image:
-            error = "Image must include a tag (e.g., 'nginx:latest')"
-            logger.error(error, extra={"image": image})
-            return False, error
+            raise ValidationError("Image must include a tag (e.g., 'nginx:latest')")
 
         parts = image.rsplit(":", 1)
         if len(parts) != 2:
-            error = "Invalid image format"
-            logger.error(error, extra={"image": image})
-            return False, error
+            raise ValidationError("Invalid image format")
 
         name_part, tag = parts
 
         tag_pattern = r"^[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}$"
         if not re.match(tag_pattern, tag):
-            error = (
+            raise ValidationError(
                 "Invalid tag format. Must start with alphanumeric or underscore, "
                 "followed by alphanumeric, dots, underscores, or hyphens (max 128 chars)"
             )
-            logger.error(error, extra={"image": image, "tag": tag})
-            return False, error
 
         name_pattern = r"^[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*(\/[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*)*$"
 
@@ -122,52 +107,42 @@ class KubernetesClient:
             registry_host, repo_path = name_part.split("/", 1)
 
             if not re.match(name_pattern, repo_path):
-                error = (
+                raise ValidationError(
                     "Invalid repository name format. Must be lowercase alphanumeric "
                     "with dots, underscores, double underscores, or hyphens as separators"
                 )
-                logger.error(error, extra={"image": image, "repo_path": repo_path})
-                return False, error
         # No registry, just repository name
         else:
             if not re.match(name_pattern, name_part):
-                error = (
+                raise ValidationError(
                     "Invalid image name format. Must be lowercase alphanumeric "
                     "with dots, underscores, double underscores, or hyphens as separators"
                 )
-                logger.error(error, extra={"image": image})
-                return False, error
 
         if len(image) > 255:
-            error = f"Image reference too long ({len(image)} chars, recommended max 255)"
-            logger.warning(error, extra={"image": image})
-            return False, error
+            raise ValidationError(
+                f"Image reference too long ({len(image)} chars, recommended max 255)"
+            )
 
         logger.debug(f"Validated image: {image}")
-        return True, None
 
-    def _validate_port(self, port: int) -> tuple[bool, str | None]:
+    def _validate_port(self, port: int) -> None:
         """
         Validate port number.
 
         Args:
             port: Port number
 
-        Returns:
-            tuple: (is_valid: bool, error_message: str or None)
+        Raises:
+            ValidationError: If port is invalid
         """
         if not isinstance(port, int):
-            error = f"Port must be an integer, got {type(port).__name__}"
-            logger.error(error, extra={"port": port, "type": type(port).__name__})
-            return False, error
+            raise ValidationError(f"Port must be an integer, got {type(port).__name__}")
 
         if not (1 <= port <= 65535):
-            error = f"Port must be between 1-65535, got {port}"
-            logger.error(error, extra={"port": port})
-            return False, error
+            raise ValidationError(f"Port must be between 1-65535, got {port}")
 
         logger.debug(f"Validated port: {port}")
-        return True, None
 
     def _parse_yaml_manifest(self, yaml_content: str, namespace: str) -> dict | None:
         """
@@ -478,8 +453,10 @@ class KubernetesClient:
         Returns:
             True if successful, False otherwise
         """
-        is_valid, error_msg = self._validate_k8s_name(name, "namespace")
-        if not is_valid:
+        try:
+            self._validate_k8s_name(name, "namespace")
+        except ValidationError as e:
+            logger.error(str(e))
             return False
 
         try:
@@ -508,8 +485,10 @@ class KubernetesClient:
         Returns:
             True if successful, False otherwise
         """
-        is_valid, error_msg = self._validate_k8s_name(name, "namespace")
-        if not is_valid:
+        try:
+            self._validate_k8s_name(name, "namespace")
+        except ValidationError as e:
+            logger.error(str(e))
             return False
 
         try:
@@ -553,8 +532,10 @@ class KubernetesClient:
         Returns:
             True if exists, False otherwise
         """
-        is_valid, error_msg = self._validate_k8s_name(name, "namespace")
-        if not is_valid:
+        try:
+            self._validate_k8s_name(name, "namespace")
+        except ValidationError as e:
+            logger.error(str(e))
             return False
 
         try:
@@ -596,20 +577,13 @@ class KubernetesClient:
             extra={"deployment": name, "namespace": namespace, "image": image, "port": port},
         )
 
-        is_valid, error_msg = self._validate_k8s_name(name, "deployment")
-        if not is_valid:
-            return False
-
-        is_valid, error_msg = self._validate_k8s_name(namespace, "namespace")
-        if not is_valid:
-            return False
-
-        is_valid, error_msg = self._validate_image_name(image)
-        if not is_valid:
-            return False
-
-        is_valid, error_msg = self._validate_port(port)
-        if not is_valid:
+        try:
+            self._validate_k8s_name(name, "deployment")
+            self._validate_k8s_name(namespace, "namespace")
+            self._validate_image_name(image)
+            self._validate_port(port)
+        except ValidationError as e:
+            logger.error(str(e))
             return False
 
         data = {
@@ -656,22 +630,13 @@ class KubernetesClient:
             },
         )
 
-        is_valid, error_msg = self._validate_k8s_name(name, "service")
-        if not is_valid:
-            return False
-
-        is_valid, error_msg = self._validate_k8s_name(namespace, "namespace")
-        if not is_valid:
-            return False
-
-        is_valid, error_msg = self._validate_port(port)
-        if not is_valid:
-            logger.error("Invalid service port", extra={"port": port})
-            return False
-
-        is_valid, error_msg = self._validate_port(target_port)
-        if not is_valid:
-            logger.error("Invalid target port", extra={"target_port": target_port})
+        try:
+            self._validate_k8s_name(name, "service")
+            self._validate_k8s_name(namespace, "namespace")
+            self._validate_port(port)
+            self._validate_port(target_port)
+        except ValidationError as e:
+            logger.error(str(e))
             return False
 
         data = {"name": name, "namespace": namespace, "port": port, "target_port": target_port}
@@ -704,12 +669,11 @@ class KubernetesClient:
             extra={"middleware": name, "namespace": namespace, "prefixes": prefixes},
         )
 
-        is_valid, error_msg = self._validate_k8s_name(name, "middleware")
-        if not is_valid:
-            return False
-
-        is_valid, error_msg = self._validate_k8s_name(namespace, "namespace")
-        if not is_valid:
+        try:
+            self._validate_k8s_name(name, "middleware")
+            self._validate_k8s_name(namespace, "namespace")
+        except ValidationError as e:
+            logger.error(str(e))
             return False
 
         data = {"name": name, "namespace": namespace, "prefixes": prefixes}
@@ -757,17 +721,12 @@ class KubernetesClient:
             },
         )
 
-        is_valid, error_msg = self._validate_k8s_name(name, "ingress")
-        if not is_valid:
-            return False
-
-        is_valid, error_msg = self._validate_k8s_name(namespace, "namespace")
-        if not is_valid:
-            return False
-
-        is_valid, error_msg = self._validate_port(service_port)
-        if not is_valid:
-            logger.error("Invalid service port", extra={"service_port": service_port})
+        try:
+            self._validate_k8s_name(name, "ingress")
+            self._validate_k8s_name(namespace, "namespace")
+            self._validate_port(service_port)
+        except ValidationError as e:
+            logger.error(str(e))
             return False
 
         data = {

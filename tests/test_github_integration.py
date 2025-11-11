@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 import pytest
 from github import GithubException
 
+from automation.exceptions import GitHubError
 from automation.github_integration import GithubClient
 
 
@@ -42,9 +43,8 @@ def test_post_comment_success(mock_github_client):
     mock_pr.create_issue_comment.return_value = mock_comment
     mock_github_client.repo.get_pull.return_value = mock_pr
 
-    result = mock_github_client.post_comment(42, "Test message")
+    mock_github_client.post_comment(42, "Test message")
 
-    assert result is True
     mock_github_client.repo.get_pull.assert_called_once_with(42)
     mock_pr.create_issue_comment.assert_called_once_with("Test message")
 
@@ -57,9 +57,8 @@ def test_post_comment_github_exception(mock_github_client):
     )
     mock_github_client.repo.get_pull.return_value = mock_pr
 
-    result = mock_github_client.post_comment(42, "Test message")
-
-    assert result is False
+    with pytest.raises(GitHubError, match="Failed to post comment"):
+        mock_github_client.post_comment(42, "Test message")
 
 
 def test_post_comment_unexpected_exception(mock_github_client):
@@ -68,9 +67,8 @@ def test_post_comment_unexpected_exception(mock_github_client):
     mock_pr.create_issue_comment.side_effect = ValueError("Unexpected error")
     mock_github_client.repo.get_pull.return_value = mock_pr
 
-    result = mock_github_client.post_comment(42, "Test message")
-
-    assert result is False
+    with pytest.raises(GitHubError, match="Unexpected error posting"):
+        mock_github_client.post_comment(42, "Test message")
 
 
 def test_find_bot_comment_success(mock_github_client):
@@ -114,18 +112,16 @@ def test_find_bot_comment_github_exception(mock_github_client):
         status=404, data={"message": "Not Found"}, headers={}
     )
 
-    result = mock_github_client.find_bot_comment(42)
-
-    assert result is None
+    with pytest.raises(GitHubError, match="Failed to search"):
+        mock_github_client.find_bot_comment(42)
 
 
 def test_find_bot_comment_unexpected_exception(mock_github_client):
     """Test finding comment with unexpected error."""
     mock_github_client.repo.get_pull.side_effect = ValueError("Unexpected error")
 
-    result = mock_github_client.find_bot_comment(42)
-
-    assert result is None
+    with pytest.raises(GitHubError, match="Unexpected error finding"):
+        mock_github_client.find_bot_comment(42)
 
 
 def test_update_comment_success(mock_github_client):
@@ -135,9 +131,8 @@ def test_update_comment_success(mock_github_client):
     mock_pr.get_issue_comment.return_value = mock_comment
     mock_github_client.repo.get_pull.return_value = mock_pr
 
-    result = mock_github_client.update_comment(42, 123456789, "Updated message")
+    mock_github_client.update_comment(42, 123456789, "Updated message")
 
-    assert result is True
     mock_pr.get_issue_comment.assert_called_once_with(123456789)
     mock_comment.edit.assert_called_once_with("Updated message")
 
@@ -150,9 +145,8 @@ def test_update_comment_github_exception(mock_github_client):
     )
     mock_github_client.repo.get_pull.return_value = mock_pr
 
-    result = mock_github_client.update_comment(42, 123456789, "Updated message")
-
-    assert result is False
+    with pytest.raises(GitHubError, match="Failed to update"):
+        mock_github_client.update_comment(42, 123456789, "Updated message")
 
 
 def test_update_comment_unexpected_exception(mock_github_client):
@@ -161,9 +155,8 @@ def test_update_comment_unexpected_exception(mock_github_client):
     mock_pr.get_issue_comment.side_effect = ValueError("Unexpected error")
     mock_github_client.repo.get_pull.return_value = mock_pr
 
-    result = mock_github_client.update_comment(42, 123456789, "Updated message")
-
-    assert result is False
+    with pytest.raises(GitHubError, match="Unexpected error updating"):
+        mock_github_client.update_comment(42, 123456789, "Updated message")
 
 
 def test_initialization_failure():

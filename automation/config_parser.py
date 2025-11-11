@@ -103,5 +103,5 @@ def _validate_service(service: dict, index: int, config_path: str) -> None:
 
     if not isinstance(service["port"], int):
         raise ConfigError(
-            f"Service '{service['port']}' 'port' must be an integer, got {type(service['port']).__name__}"
+            f"Service '{service['name']}' 'port' must be an integer, got {type(service['port']).__name__}"
         )

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from github import Auth, Github, GithubException
 
+from automation.exceptions import GitHubError
 from automation.logger import get_logger
 
 logger = get_logger(__name__)
@@ -35,7 +36,7 @@ class GithubClient:
             logger.critical(f"Failed to initialize GitHub client: {e}")
             raise
 
-    def post_comment(self, pr_number: int, message: str) -> bool:
+    def post_comment(self, pr_number: int, message: str) -> None:
         """
         Post a new comment to a PR.
 
@@ -43,8 +44,8 @@ class GithubClient:
             pr_number: Pull request number
             message: Comment message content
 
-        Returns:
-            True if successful, False otherwise
+        Raises:
+            GitHubError: If comment posting fails
         """
         try:
             pr = self.repo.get_pull(pr_number)
@@ -53,18 +54,10 @@ class GithubClient:
                 f"Posted comment {comment.id} to PR #{pr_number}",
                 extra={"pr_number": pr_number, "comment_id": comment.id},
             )
-            return True
         except GithubException as e:
-            logger.error(
-                f"Failed to post comment to PR #{pr_number}",
-                extra={"pr_number": pr_number, "error": str(e)},
-            )
-            return False
+            raise GitHubError(f"Failed to post comment to PR #{pr_number}: {e}") from e
         except Exception as e:
-            logger.error(
-                "Unexpected error posting comment", extra={"pr_number": pr_number, "error": str(e)}
-            )
-            return False
+            raise GitHubError(f"Unexpected error posting comment to PR #{pr_number}: {e}") from e
 
     def find_bot_comment(self, pr_number: int) -> int | None:
         """
@@ -74,7 +67,10 @@ class GithubClient:
             pr_number: Pull request number
 
         Returns:
-            Comment ID if found, None otherwise
+            Comment ID if found, None if not found
+
+        Raises:
+            GitHubError: If search fails
         """
         try:
             pr = self.repo.get_pull(pr_number)
@@ -92,18 +88,11 @@ class GithubClient:
             logger.info(f"No existing bot comment found on PR #{pr_number}")
             return None
         except GithubException as e:
-            logger.error(
-                f"Failed to search for bot comment on PR #{pr_number}",
-                extra={"pr_number": pr_number, "error": str(e)},
-            )
-            return None
+            raise GitHubError(f"Failed to search for bot comment on PR #{pr_number}: {e}") from e
         except Exception as e:
-            logger.error(
-                "Unexpected error finding comment", extra={"pr_number": pr_number, "error": str(e)}
-            )
-            return None
+            raise GitHubError(f"Unexpected error finding comment on PR #{pr_number}: {e}") from e
 
-    def update_comment(self, pr_number: int, comment_id: int, message: str) -> bool:
+    def update_comment(self, pr_number: int, comment_id: int, message: str) -> None:
         """
         Update an existing comment.
 
@@ -112,8 +101,8 @@ class GithubClient:
             comment_id: ID of the comment to update
             message: New message content
 
-        Returns:
-            True if successful, False otherwise
+        Raises:
+            GitHubError: If update fails
         """
         try:
             pr = self.repo.get_pull(pr_number)
@@ -123,16 +112,11 @@ class GithubClient:
                 f"Updated comment {comment_id} on PR #{pr_number}",
                 extra={"comment_id": comment_id, "pr_number": pr_number},
             )
-            return True
         except GithubException as e:
-            logger.error(
-                f"Failed to update comment {comment_id} on PR #{pr_number}",
-                extra={"comment_id": comment_id, "pr_number": pr_number, "error": str(e)},
-            )
-            return False
+            raise GitHubError(
+                f"Failed to update comment {comment_id} on PR #{pr_number}: {e}"
+            ) from e
         except Exception as e:
-            logger.error(
-                f"Unexpected error updating comment {comment_id} on PR #{pr_number}: {e}",
-                extra={"comment_id": comment_id, "pr_number": pr_number, "error": str(e)},
-            )
-            return False
+            raise GitHubError(
+                f"Unexpected error updating comment {comment_id} on PR #{pr_number}: {e}"
+            ) from e

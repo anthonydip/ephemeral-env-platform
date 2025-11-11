@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 import pytest
 from kubernetes.client.rest import ApiException
 
-from automation.exceptions import ValidationError
+from automation.exceptions import KubernetesError, TemplateError, ValidationError
 from automation.k8s_client import KubernetesClient
 
 
@@ -190,16 +190,15 @@ def test_create_namespace_api_error(mock_k8s_client):
     """Test creating namespace with API error."""
     mock_k8s_client.v1.create_namespace.side_effect = ApiException(status=500)
 
-    result = mock_k8s_client.create_namespace("test-namespace")
-
-    assert result is False
+    with pytest.raises(KubernetesError, match="Failed to create namespace"):
+        mock_k8s_client.create_namespace("test-namespace")
 
 
 def test_create_namespace_invalid_name(mock_k8s_client):
     """Test creating namespace with invalid name."""
-    result = mock_k8s_client.create_namespace("INVALID-NAME-WITH-CAPS")
+    with pytest.raises(ValidationError):
+        mock_k8s_client.create_namespace("INVALID-NAME-WITH-CAPS")
 
-    assert result is False
     mock_k8s_client.v1.create_namespace.assert_not_called()
 
 
@@ -224,11 +223,12 @@ def test_delete_namespace_not_found(mock_k8s_client):
 
 def test_delete_namespace_api_error(mock_k8s_client):
     """Test deleting namespace with API error."""
-    mock_k8s_client.v1.delete_namespace.side_effect = ApiException(status=500)
+    api_exception = ApiException(status=500)
+    api_exception.reason = "Internal Server Error"
+    mock_k8s_client.v1.delete_namespace.side_effect = api_exception
 
-    result = mock_k8s_client.delete_namespace("test-namespace")
-
-    assert result is False
+    with pytest.raises(KubernetesError):
+        mock_k8s_client.delete_namespace("test-namespace")
 
 
 # ============================================================================
@@ -241,7 +241,7 @@ def test_create_deployment_success(mock_k8s_client, template_dir):
     with patch("automation.k8s_client.utils.create_from_dict") as mock_create:
         mock_create.return_value = Mock()
 
-        result = mock_k8s_client.create_deployment(
+        mock_k8s_client.create_deployment(
             name="test-app",
             namespace="test-ns",
             image="nginx:latest",
@@ -249,7 +249,6 @@ def test_create_deployment_success(mock_k8s_client, template_dir):
             template_dir=template_dir,
         )
 
-    assert result is True
     mock_create.assert_called_once()
 
 
@@ -262,7 +261,7 @@ def test_create_deployment_already_exists_updates(mock_k8s_client, template_dir)
 
         mock_k8s_client.apps_v1.patch_namespaced_deployment.return_value = Mock()
 
-        result = mock_k8s_client.create_deployment(
+        mock_k8s_client.create_deployment(
             name="test-app",
             namespace="test-ns",
             image="nginx:latest",
@@ -270,43 +269,39 @@ def test_create_deployment_already_exists_updates(mock_k8s_client, template_dir)
             template_dir=template_dir,
         )
 
-    assert result is True
     mock_k8s_client.apps_v1.patch_namespaced_deployment.assert_called_once()
 
 
 def test_create_deployment_invalid_image(mock_k8s_client, template_dir):
     """Test creating deployment with invalid image."""
-    result = mock_k8s_client.create_deployment(
-        name="test-app", namespace="test-ns", image="", port=80, template_dir=template_dir
-    )
-
-    assert result is False
+    with pytest.raises(ValidationError):
+        mock_k8s_client.create_deployment(
+            name="test-app", namespace="test-ns", image="", port=80, template_dir=template_dir
+        )
 
 
 def test_create_deployment_invalid_port(mock_k8s_client, template_dir):
     """Test creating deployment with invalid port."""
-    result = mock_k8s_client.create_deployment(
-        name="test-app",
-        namespace="test-ns",
-        image="nginx:latest",
-        port=99999,
-        template_dir=template_dir,
-    )
-
-    assert result is False
+    with pytest.raises(ValidationError):
+        mock_k8s_client.create_deployment(
+            name="test-app",
+            namespace="test-ns",
+            image="nginx:latest",
+            port=99999,
+            template_dir=template_dir,
+        )
 
 
 def test_create_deployment_missing_template(mock_k8s_client, template_dir):
     """Test creating deployment with missing template file."""
-    result = mock_k8s_client.create_deployment(
-        name="test-app",
-        namespace="test-ns",
-        image="nginx:latest",
-        port=80,
-        template_dir="nonexistent/directory",
-    )
-
-    assert result is False
+    with pytest.raises(TemplateError):
+        mock_k8s_client.create_deployment(
+            name="test-app",
+            namespace="test-ns",
+            image="nginx:latest",
+            port=80,
+            template_dir="nonexistent/directory",
+        )
 
 
 # ============================================================================
@@ -319,7 +314,7 @@ def test_create_service_success(mock_k8s_client, template_dir):
     with patch("automation.k8s_client.utils.create_from_dict") as mock_create:
         mock_create.return_value = Mock()
 
-        result = mock_k8s_client.create_service(
+        mock_k8s_client.create_service(
             name="test-svc",
             namespace="test-ns",
             port=80,
@@ -327,17 +322,19 @@ def test_create_service_success(mock_k8s_client, template_dir):
             template_dir=template_dir,
         )
 
-    assert result is True
     mock_create.assert_called_once()
 
 
 def test_create_service_invalid_port(mock_k8s_client, template_dir):
     """Test creating service with invalid port."""
-    result = mock_k8s_client.create_service(
-        name="test-svc", namespace="test-ns", port=99999, target_port=80, template_dir=template_dir
-    )
-
-    assert result is False
+    with pytest.raises(ValidationError):
+        mock_k8s_client.create_service(
+            name="test-svc",
+            namespace="test-ns",
+            port=99999,
+            target_port=80,
+            template_dir=template_dir,
+        )
 
 
 # ============================================================================
@@ -351,11 +348,10 @@ def test_create_middleware_success(mock_k8s_client, template_dir):
     mock_custom_api.create_namespaced_custom_object.return_value = Mock()
 
     with patch("automation.k8s_client.client.CustomObjectsApi", return_value=mock_custom_api):
-        result = mock_k8s_client.create_middleware(
+        mock_k8s_client.create_middleware(
             name="stripprefix", namespace="test-ns", prefixes=["/pr-123"], template_dir=template_dir
         )
 
-    assert result is True
     mock_custom_api.create_namespaced_custom_object.assert_called_once()
 
 
@@ -369,7 +365,7 @@ def test_create_ingress_success(mock_k8s_client, template_dir):
     with patch("automation.k8s_client.utils.create_from_dict") as mock_create:
         mock_create.return_value = Mock()
 
-        result = mock_k8s_client.create_ingress(
+        mock_k8s_client.create_ingress(
             name="test-ingress",
             namespace="test-ns",
             path="/test",
@@ -379,7 +375,7 @@ def test_create_ingress_success(mock_k8s_client, template_dir):
             template_dir=template_dir,
         )
 
-    assert result is True
+    mock_create.assert_called_once()
 
 
 # ============================================================================
@@ -408,12 +404,11 @@ spec:
 
 
 def test_parse_yaml_manifest_invalid_yaml(mock_k8s_client):
-    """Test parsing invalid YAML returns None."""
+    """Test parsing invalid YAML raises KubernetesError."""
     yaml_content = "invalid: yaml: content: [[[["
 
-    result = mock_k8s_client._parse_yaml_manifest(yaml_content, "test-ns")
-
-    assert result is None
+    with pytest.raises(KubernetesError):
+        mock_k8s_client._parse_yaml_manifest(yaml_content, "test-ns")
 
 
 def test_is_traefik_crd_with_traefik_io(mock_k8s_client):
@@ -472,9 +467,8 @@ def test_apply_traefik_crd_create_success(mock_k8s_client):
     mock_custom_api.create_namespaced_custom_object.return_value = Mock()
 
     with patch("automation.k8s_client.client.CustomObjectsApi", return_value=mock_custom_api):
-        result = mock_k8s_client._apply_traefik_crd(manifest, "test-ns")
+        mock_k8s_client._apply_traefik_crd(manifest, "test-ns")
 
-    assert result is True
     mock_custom_api.create_namespaced_custom_object.assert_called_once()
 
 
@@ -497,9 +491,7 @@ def test_apply_traefik_crd_already_exists_updates(mock_k8s_client):
     mock_custom_api.patch_namespaced_custom_object.return_value = Mock()
 
     with patch("automation.k8s_client.client.CustomObjectsApi", return_value=mock_custom_api):
-        result = mock_k8s_client._apply_traefik_crd(manifest, "test-ns")
-
-    assert result is True
+        mock_k8s_client._apply_traefik_crd(manifest, "test-ns")
 
     mock_custom_api.get_namespaced_custom_object.assert_called_once()
     mock_custom_api.patch_namespaced_custom_object.assert_called_once()
@@ -516,9 +508,8 @@ def test_apply_standard_resource_create_success(mock_k8s_client):
     with patch("automation.k8s_client.utils.create_from_dict") as mock_create:
         mock_create.return_value = Mock()
 
-        result = mock_k8s_client._apply_standard_resource(manifest, "test-ns")
+        mock_k8s_client._apply_standard_resource(manifest, "test-ns")
 
-    assert result is True
     mock_create.assert_called_once()
 
 
@@ -537,9 +528,8 @@ def test_apply_standard_resource_already_exists_updates(mock_k8s_client):
 
         mock_k8s_client.apps_v1.patch_namespaced_deployment.return_value = Mock()
 
-        result = mock_k8s_client._apply_standard_resource(manifest, "test-ns")
+        mock_k8s_client._apply_standard_resource(manifest, "test-ns")
 
-    assert result is True
     mock_k8s_client.apps_v1.patch_namespaced_deployment.assert_called_once()
 
 
@@ -549,11 +539,7 @@ def test_update_standard_resource_deployment(mock_k8s_client):
 
     mock_k8s_client.apps_v1.patch_namespaced_deployment.return_value = Mock()
 
-    result = mock_k8s_client._update_standard_resource(
-        manifest, "test-ns", "Deployment", "test-app"
-    )
-
-    assert result is True
+    mock_k8s_client._update_standard_resource(manifest, "test-ns", "Deployment", "test-app")
     mock_k8s_client.apps_v1.patch_namespaced_deployment.assert_called_once_with(
         name="test-app", namespace="test-ns", body=manifest
     )
@@ -565,9 +551,8 @@ def test_update_standard_resource_service(mock_k8s_client):
 
     mock_k8s_client.v1.patch_namespaced_service.return_value = Mock()
 
-    result = mock_k8s_client._update_standard_resource(manifest, "test-ns", "Service", "test-svc")
+    mock_k8s_client._update_standard_resource(manifest, "test-ns", "Service", "test-svc")
 
-    assert result is True
     mock_k8s_client.v1.patch_namespaced_service.assert_called_once_with(
         name="test-svc", namespace="test-ns", body=manifest
     )
@@ -585,11 +570,8 @@ def test_update_standard_resource_ingress(mock_k8s_client):
     mock_networking_v1.patch_namespaced_ingress.return_value = Mock()
 
     with patch("automation.k8s_client.client.NetworkingV1Api", return_value=mock_networking_v1):
-        result = mock_k8s_client._update_standard_resource(
-            manifest, "test-ns", "Ingress", "test-ingress"
-        )
+        mock_k8s_client._update_standard_resource(manifest, "test-ns", "Ingress", "test-ingress")
 
-    assert result is True
     mock_networking_v1.patch_namespaced_ingress.assert_called_once()
 
 
@@ -597,11 +579,8 @@ def test_update_standard_resource_unsupported_kind(mock_k8s_client):
     """Test updating an unsupported resource kind returns False."""
     manifest = {"apiVersion": "v1", "kind": "UnsupportedKind", "metadata": {"name": "test"}}
 
-    result = mock_k8s_client._update_standard_resource(
-        manifest, "test-ns", "UnsupportedKind", "test"
-    )
-
-    assert result is False
+    with pytest.raises(KubernetesError, match="Update not implemented"):
+        mock_k8s_client._update_standard_resource(manifest, "test-ns", "UnsupportedKind", "test")
 
 
 def test_update_standard_resource_api_error(mock_k8s_client):
@@ -610,6 +589,5 @@ def test_update_standard_resource_api_error(mock_k8s_client):
 
     mock_k8s_client.v1.patch_namespaced_service.side_effect = ApiException(status=500)
 
-    result = mock_k8s_client._update_standard_resource(manifest, "test-ns", "Service", "test-svc")
-
-    assert result is False
+    with pytest.raises(KubernetesError, match="Failed to update Service"):
+        mock_k8s_client._update_standard_resource(manifest, "test-ns", "Service", "test-svc")

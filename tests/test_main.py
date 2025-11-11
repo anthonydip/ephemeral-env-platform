@@ -6,6 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from automation.exceptions import GitHubError, KubernetesError
 from automation.main import create_environment, delete_environment
 
 
@@ -200,7 +201,7 @@ def test_create_environment_missing_config(mock_k8s_client, template_dir):
 
 def test_create_environment_namespace_failure(mock_k8s_client, test_config_file, template_dir):
     """Test environment creation when namespace creation fails."""
-    mock_k8s_client.create_namespace.return_value = False
+    mock_k8s_client.create_namespace.side_effect = KubernetesError("Failed to create namespace")
 
     result = create_environment(
         k8s=mock_k8s_client,
@@ -218,7 +219,7 @@ def test_create_environment_namespace_failure(mock_k8s_client, test_config_file,
 def test_create_environment_deployment_failure(mock_k8s_client, test_config_file, template_dir):
     """Test environment creation when deployment fails."""
 
-    mock_k8s_client.create_deployment.side_effect = [True, False, True]
+    mock_k8s_client.create_deployment.side_effect = KubernetesError("Failed to create deployment")
 
     result = create_environment(
         k8s=mock_k8s_client,
@@ -233,7 +234,7 @@ def test_create_environment_deployment_failure(mock_k8s_client, test_config_file
 
 def test_create_environment_service_failure(mock_k8s_client, test_config_file, template_dir):
     """Test environment creation when service creation fails."""
-    mock_k8s_client.create_service.side_effect = [True, False, True]
+    mock_k8s_client.create_service.side_effect = KubernetesError("Failed to create service")
 
     result = create_environment(
         k8s=mock_k8s_client,
@@ -248,7 +249,7 @@ def test_create_environment_service_failure(mock_k8s_client, test_config_file, t
 
 def test_create_environment_middleware_failure(mock_k8s_client, test_config_file, template_dir):
     """Test environment creation when middleware creation fails."""
-    mock_k8s_client.create_middleware.return_value = False
+    mock_k8s_client.create_middleware.side_effect = KubernetesError("Failed to create middleware")
 
     result = create_environment(
         k8s=mock_k8s_client,
@@ -263,7 +264,7 @@ def test_create_environment_middleware_failure(mock_k8s_client, test_config_file
 
 def test_create_environment_ingress_failure(mock_k8s_client, test_config_file, template_dir):
     """Test environment creation when ingress creation fails."""
-    mock_k8s_client.create_ingress.return_value = False
+    mock_k8s_client.create_ingress.side_effect = KubernetesError("Failed to create ingress")
 
     result = create_environment(
         k8s=mock_k8s_client,
@@ -282,7 +283,7 @@ def test_create_environment_github_exception_handled(
     """Test that GitHub exceptions don't break environment creation."""
     monkeypatch.setenv("EC2_PUBLIC_IP", "1.2.3.4")
 
-    mock_github_client.post_comment.side_effect = Exception("GitHub API error")
+    mock_github_client.post_comment.side_effect = GitHubError("GitHub API error")
 
     result = create_environment(
         k8s=mock_k8s_client,
@@ -337,7 +338,7 @@ def test_delete_environment_success(mock_k8s_client):
 
 def test_delete_environment_failure(mock_k8s_client):
     """Test environment deletion failure."""
-    mock_k8s_client.delete_namespace.return_value = False
+    mock_k8s_client.delete_namespace.side_effect = KubernetesError("Failed to delete namespace")
 
     result = delete_environment(k8s=mock_k8s_client, namespace="pr-999")
 

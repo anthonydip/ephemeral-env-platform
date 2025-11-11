@@ -13,6 +13,13 @@ import sys
 from dotenv import load_dotenv
 
 from automation.config_parser import load_config
+from automation.exceptions import (
+    ConfigError,
+    GitHubError,
+    KubernetesError,
+    TemplateError,
+    ValidationError,
+)
 from automation.github_integration import GithubClient
 from automation.k8s_client import KubernetesClient
 from automation.logger import get_logger, setup_logging
@@ -119,135 +126,131 @@ def create_environment(
         config_path: Path to configuration file
         template_dir: Path to templates directory
         github: Optional GithubClient instance for PR comments
+
+    Returns:
+        True if successful, False otherwise
     """
     logger = get_logger(__name__)
 
     logger.info(f"Creating environment: {namespace}", extra={"namespace": namespace})
 
-    # Load YAML configuration file
-    config = load_config(config_path)
-    if not config:
-        return False
+    try:
+        # Load YAML configuration file
+        config = load_config(config_path)
 
-    # Create namespace
-    if not k8s.create_namespace(namespace):
-        return False
+        # Create namespace
+        k8s.create_namespace(namespace)
 
-    # Create services and deployments
-    failed_services = []
-    for service in config["services"]:
-        deployment_success = k8s.create_deployment(
-            name=service["name"],
-            namespace=namespace,
-            image=service["image"],
-            port=service["port"],
-            template_dir=template_dir,
-            env_vars=service.get("env"),
-        )
-
-        service_success = k8s.create_service(
-            name=service["name"],
-            namespace=namespace,
-            port=service["port"],
-            target_port=service["port"],
-            template_dir=template_dir,
-        )
-
-        if not (deployment_success and service_success):
-            failed_services.append(service["name"])
-
-    if failed_services:
-        logger.error(
-            "Some services failed to deploy",
-            extra={"namespace": namespace, "failed_services": failed_services},
-        )
-        return False
-
-    # Create middleware for path stripping
-    middleware_success = k8s.create_middleware(
-        name="stripprefix",
-        namespace=namespace,
-        prefixes=[f"/{namespace}"],
-        template_dir=template_dir,
-    )
-
-    if not middleware_success:
-        logger.error("Failed to create middleware", extra={"namespace": namespace})
-        return False
-
-    # Create ingress for each service that has ingress.enabled = True
-    ingress_created = False
-    for service in config["services"]:
-        if service.get("ingress", {}).get("enabled", False):
-            service_path = service["ingress"].get("path", "/")
-            full_path = f"/{namespace}{service_path}"
-
-            ingress_success = k8s.create_ingress(
-                name=f"{namespace}-{service['name']}-ingress",
+        # Create services and deployments
+        for service in config["services"]:
+            k8s.create_deployment(
+                name=service["name"],
                 namespace=namespace,
-                path=full_path,
-                service_name=service["name"],
-                service_port=service["port"],
-                middleware_name="stripprefix",
+                image=service["image"],
+                port=service["port"],
+                template_dir=template_dir,
+                env_vars=service.get("env"),
+            )
+
+            k8s.create_service(
+                name=service["name"],
+                namespace=namespace,
+                port=service["port"],
+                target_port=service["port"],
                 template_dir=template_dir,
             )
 
-            if not ingress_success:
-                logger.error(
-                    f"Failed to create ingress for {service['name']}",
-                    extra={"namespace": namespace, "service": service["name"]},
-                )
-                return False
-
-            ingress_created = True
-            logger.info(
-                f"Created ingress for {service['name']} at {full_path}",
-                extra={"namespace": namespace, "service": service["name"], "path": full_path},
-            )
-
-    ec2_ip = os.getenv("EC2_PUBLIC_IP", "<EC2-IP>")
-
-    if ingress_created:
-        logger.info(f"Preview environment accessible at: http://{ec2_ip}/{namespace}/")
-    else:
-        logger.info("No ingress configured - environment only accessible via port-forward")
-
-    logger.info("Access services directly with kubectl port-forward:")
-    for service in config["services"]:
-        local_port = service["port"] + 1000
-        logger.info(
-            f"  kubectl port-forward -n {namespace} svc/{service['name']} {local_port}:{service['port']}"
+        # Create middleware for path stripping
+        k8s.create_middleware(
+            name="stripprefix",
+            namespace=namespace,
+            prefixes=[f"/{namespace}"],
+            template_dir=template_dir,
         )
 
-    # Post/update GitHub comment if integration is enabled
-    if github and ingress_created:
-        try:
-            pr_number = int(namespace.replace("pr-", ""))
+        # Create ingress for each service that has ingress.enabled = True
+        ingress_created = False
+        for service in config["services"]:
+            if service.get("ingress", {}).get("enabled", False):
+                service_path = service["ingress"].get("path", "/")
+                full_path = f"/{namespace}{service_path}"
 
-            # Build comment message with links to all ingress-enabled services
-            service_links = []
-            for service in config["services"]:
-                if service.get("ingress", {}).get("enabled", False):
-                    service_path = service["ingress"].get("path", "/")
-                    service_url = f"http://{ec2_ip}/{namespace}{service_path}"
-                    service_links.append(f"**{service['name'].title()}:** {service_url}")
+                k8s.create_ingress(
+                    name=f"{namespace}-{service['name']}-ingress",
+                    namespace=namespace,
+                    path=full_path,
+                    service_name=service["name"],
+                    service_port=service["port"],
+                    middleware_name="stripprefix",
+                    template_dir=template_dir,
+                )
 
-            links_text = "\n".join(service_links)
+                ingress_created = True
+                logger.info(
+                    f"Created ingress for {service['name']} at {full_path}",
+                    extra={"namespace": namespace, "service": service["name"], "path": full_path},
+                )
 
-            message = f"🚀 **Preview Environment Ready!**\n\n{links_text}\n\nThe environment will be automatically deleted when this PR is closed."
+        ec2_ip = os.getenv("EC2_PUBLIC_IP", "<EC2-IP>")
 
-            # Check if comment already exists
-            existing_comment_id = github.find_bot_comment(pr_number)
+        if ingress_created:
+            logger.info(f"Preview environment accessible at: http://{ec2_ip}/{namespace}/")
+        else:
+            logger.info("No ingress configured - environment only accessible via port-forward")
 
-            if existing_comment_id:
-                github.update_comment(pr_number, existing_comment_id, message)
-            else:
-                github.post_comment(pr_number, message)
+        logger.info("Access services directly with kubectl port-forward:")
+        for service in config["services"]:
+            local_port = service["port"] + 1000
+            logger.info(
+                f"  kubectl port-forward -n {namespace} svc/{service['name']} {local_port}:{service['port']}"
+            )
 
-        except Exception as e:
-            logger.warning(f"Failed to post GitHub comment: {e}")
+        # Post/update GitHub comment if integration is enabled
+        if github and ingress_created:
+            try:
+                pr_number = int(namespace.replace("pr-", ""))
 
-    return True
+                # Build comment message with links to all ingress-enabled services
+                service_links = []
+                for service in config["services"]:
+                    if service.get("ingress", {}).get("enabled", False):
+                        service_path = service["ingress"].get("path", "/")
+                        service_url = f"http://{ec2_ip}/{namespace}{service_path}"
+                        service_links.append(f"**{service['name'].title()}:** {service_url}")
+
+                links_text = "\n".join(service_links)
+
+                message = f"🚀 **Preview Environment Ready!**\n\n{links_text}\n\nThe environment will be automatically deleted when this PR is closed."
+
+                # Check if comment already exists
+                existing_comment_id = github.find_bot_comment(pr_number)
+
+                if existing_comment_id:
+                    github.update_comment(pr_number, existing_comment_id, message)
+                else:
+                    github.post_comment(pr_number, message)
+
+            except GitHubError as e:
+                # GitHub integration is optional
+                logger.warning(f"Failed to post GitHub comment: {e}")
+
+        return True
+
+    except ConfigError as e:
+        logger.error(str(e))
+        return False
+    except ValidationError as e:
+        logger.error(str(e))
+        return False
+    except TemplateError as e:
+        logger.error(str(e))
+        return False
+    except KubernetesError as e:
+        logger.error(str(e))
+        return False
+    except Exception as e:
+        logger.error(str(e))
+        return False
 
 
 def delete_environment(k8s: KubernetesClient, namespace: str) -> bool:
@@ -257,20 +260,33 @@ def delete_environment(k8s: KubernetesClient, namespace: str) -> bool:
     Args:
         k8s: KubernetesClient instance
         namespace: Namespace name to delete
+
+    Returns:
+        True if successful, False otherwise
     """
     logger = get_logger(__name__)
 
     logger.info(f"Deleting environment: {namespace}", extra={"namespace": namespace})
 
-    if not k8s.delete_namespace(namespace):
+    try:
+        k8s.delete_namespace(namespace)
+
+        logger.info(
+            f"Environment successfully deleted: {namespace} (resources may take a few seconds to terminate)",
+            extra={"namespace": namespace},
+        )
+
+        return True
+
+    except ValidationError as e:
+        logger.error(str(e))
         return False
-
-    logger.info(
-        f"Environment successfully deleted: {namespace} (resources may take a few seconds to terminate)",
-        extra={"namespace": namespace},
-    )
-
-    return True
+    except KubernetesError as e:
+        logger.error(str(e))
+        return False
+    except Exception as e:
+        logger.error(str(e))
+        return False
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ from jinja2 import (
     UndefinedError,
 )
 
+from automation.exceptions import TemplateError
 from automation.logger import get_logger
 
 logger = get_logger(__name__)
@@ -25,7 +26,7 @@ logger = get_logger(__name__)
 
 def render_template(
     template_name: str, data: dict[str, Any], template_dir: str = "automation/templates/"
-) -> str | None:
+) -> str:
     """
     Render Jinja2 template with provided data.
 
@@ -35,7 +36,10 @@ def render_template(
         template_dir: Directory containing templates (default: automation/templates/)
 
     Returns:
-        str: Rendered YAML content, or None if rendering failed
+        str: Rendered YAML content
+
+    Raises:
+        TemplateError: If template not found, syntax error, or rendering fails
     """
     logger.debug(
         f"Rendering template: {template_name}",
@@ -53,29 +57,16 @@ def render_template(
         )
         return rendered
 
-    except TemplateNotFound:
-        logger.error(
-            "Template not found", extra={"template": template_name, "template_dir": template_dir}
-        )
-        return None
+    except TemplateNotFound as e:
+        raise TemplateError(f"Template not found: {template_name} in {template_dir}") from e
 
     except TemplateSyntaxError as e:
-        logger.error(
-            "Invalid template syntax",
-            extra={"template": template_name, "line": e.lineno, "error": e.message},
-        )
-        return None
+        raise TemplateError(
+            f"Invalid syntax in template {template_name} at line {e.lineno}: {e.message}"
+        ) from e
 
     except UndefinedError as e:
-        logger.error(
-            "Missing required variable in template",
-            extra={"template": template_name, "error": str(e)},
-        )
-        return None
+        raise TemplateError(f"Missing required variable in template {template_name}: {e}") from e
 
     except Exception as e:
-        logger.error(
-            "Unexpected error rendering template",
-            extra={"template": template_name, "error": str(e), "error_type": type(e)},
-        )
-        return None
+        raise TemplateError(f"Failed to render template {template_name}: {e}") from e

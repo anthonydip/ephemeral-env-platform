@@ -2,6 +2,9 @@
 Tests for template_renderer.py
 """
 
+import pytest
+
+from automation.exceptions import TemplateError
 from automation.template_renderer import render_template
 
 
@@ -16,8 +19,6 @@ def test_render_deployment_template_with_valid_data(template_dir):
     }
 
     result = render_template("deployment.yaml.j2", data, template_dir)
-
-    assert result is not None
 
     assert "name: test-app" in result
     assert "namespace: test-namespace" in result
@@ -44,8 +45,6 @@ def test_render_deployment_with_env_vars(template_dir):
 
     result = render_template("deployment.yaml.j2", data, template_dir)
 
-    assert result is not None
-
     assert "name: test-database" in result
     assert "namespace: test-namespace" in result
     assert "image: postgres:15" in result
@@ -64,8 +63,6 @@ def test_render_service_with_valid_data(template_dir):
     data = {"name": "test-service", "namespace": "test-namespace", "port": 30, "target_port": 80}
 
     result = render_template("service.yaml.j2", data, template_dir)
-
-    assert result is not None
 
     assert "name: test-service" in result
     assert "namespace: test-namespace" in result
@@ -86,18 +83,16 @@ def test_render_template_with_missing_file(template_dir):
         "env_vars": None,
     }
 
-    result = render_template("missing.yaml.j2", data, template_dir)
-
-    assert result is None
+    with pytest.raises(TemplateError, match="Template not found"):
+        render_template("missing.yaml.j2", data, template_dir)
 
 
 def test_render_template_with_missing_variable(template_dir):
     """Test handling of missing required template variable."""
     data = {"namespace": "test-namespace", "image": "nginx:latest", "port": 80, "env_vars": None}
 
-    result = render_template("deployment.yaml.j2", data, template_dir)
-
-    assert result is None
+    with pytest.raises(TemplateError, match="Missing required variable"):
+        render_template("deployment.yaml.j2", data, template_dir)
 
 
 def test_render_middleware_template(template_dir):
@@ -106,7 +101,6 @@ def test_render_middleware_template(template_dir):
 
     result = render_template("middleware.yaml.j2", data, template_dir)
 
-    assert result is not None
     assert "name: stripprefix" in result
     assert "namespace: pr-123" in result
     assert "apiVersion: traefik.io/v1alpha1" in result
@@ -122,7 +116,6 @@ def test_render_middleware_template_single_prefix(template_dir):
 
     result = render_template("middleware.yaml.j2", data, template_dir)
 
-    assert result is not None
     assert "- /pr-999" in result
     assert result.count("- /pr-") == 1
 
@@ -140,7 +133,6 @@ def test_render_ingress_template(template_dir):
 
     result = render_template("ingress.yaml.j2", data, template_dir)
 
-    assert result is not None
     assert "name: test-ingress" in result
     assert "namespace: pr-123" in result
     assert "apiVersion: networking.k8s.io/v1" in result
@@ -171,7 +163,6 @@ def test_render_ingress_different_service_port(template_dir):
 
     result = render_template("ingress.yaml.j2", data, template_dir)
 
-    assert result is not None
     assert "name: backend-ingress" in result
     assert "path: /pr-456/api" in result
     assert "name: backend" in result

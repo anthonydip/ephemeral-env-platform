@@ -11,6 +11,7 @@ from kubernetes.client.rest import ApiException
 from kubernetes.utils import FailToCreateError
 from yaml import safe_load
 
+from automation.exceptions import KubernetesError, ValidationError
 from automation.logger import get_logger
 from automation.template_renderer import render_template
 
@@ -36,9 +37,7 @@ class KubernetesClient:
             logger.critical(f"Failed to initialize Kubernetes client: {e}")
             raise
 
-    def _validate_k8s_name(
-        self, name: str, resource_type: str = "resource"
-    ) -> tuple[bool, str | None]:
+    def _validate_k8s_name(self, name: str, resource_type: str = "resource") -> None:
         """
         Validate Kubernetes resource name (works for namespaces, deployments, services, etc.)
 
@@ -46,33 +45,28 @@ class KubernetesClient:
             name: Name to validate
             resource_type: Type of resource for error messages (e.g., "namespace", "deployment", etc.)
 
-        Returns:
-            tuple: (is_valid: bool, error_message: str or None)
+        Raises:
+            ValidationError: If name is invalid
         """
         if not name:
-            error = f"{resource_type.capitalize()} name cannot be empty"
-            logger.error(error)
-            return False, error
+            raise ValidationError(f"{resource_type.capitalize()} name cannot be empty")
 
         if len(name) > 63:
-            error = f"{resource_type.capitalize()} name too long (max 63 chars, got {len(name)})"
-            logger.error(error, extra={"resource_name": name, "length": len(name)})
-            return False, error
+            raise ValidationError(
+                f"{resource_type.capitalize()} name too long (max 63 chars, got {len(name)})"
+            )
 
         # Lowercase alphanumeric + hyphens, start/end with alphanumeric
         pattern = r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
         if not re.match(pattern, name):
-            error = (
+            raise ValidationError(
                 f"Invalid {resource_type} name. Must be lowercase letters, numbers, "
                 "and hyphens only. Must start and end with alphanumeric character."
             )
-            logger.error(error, extra={"resource_name": name})
-            return False, error
 
         logger.debug(f"Validated {resource_type} name: {name}")
-        return True, None
 
-    def _validate_image_name(self, image: str) -> tuple[bool, str | None]:
+    def _validate_image_name(self, image: str) -> None:
         """
         Validate Docker image format according to OCI specification.
 
@@ -84,35 +78,27 @@ class KubernetesClient:
         Args:
             image: Full image string (registry/name:tag or name:tag)
 
-        Returns:
-            tuple: (is_valid: bool, error_message: str or None)
+        Raises:
+            ValidationError: If image is invalid
         """
         if not image:
-            error = "Image name cannot be empty"
-            logger.error(error, extra={"image": image})
-            return False, error
+            raise ValidationError("Image name cannot be empty")
 
         if ":" not in image:
-            error = "Image must include a tag (e.g., 'nginx:latest')"
-            logger.error(error, extra={"image": image})
-            return False, error
+            raise ValidationError("Image must include a tag (e.g., 'nginx:latest')")
 
         parts = image.rsplit(":", 1)
         if len(parts) != 2:
-            error = "Invalid image format"
-            logger.error(error, extra={"image": image})
-            return False, error
+            raise ValidationError("Invalid image format")
 
         name_part, tag = parts
 
         tag_pattern = r"^[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}$"
         if not re.match(tag_pattern, tag):
-            error = (
+            raise ValidationError(
                 "Invalid tag format. Must start with alphanumeric or underscore, "
                 "followed by alphanumeric, dots, underscores, or hyphens (max 128 chars)"
             )
-            logger.error(error, extra={"image": image, "tag": tag})
-            return False, error
 
         name_pattern = r"^[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*(\/[a-z0-9]+((\.|_|__|-+)[a-z0-9]+)*)*$"
 
@@ -121,54 +107,44 @@ class KubernetesClient:
             registry_host, repo_path = name_part.split("/", 1)
 
             if not re.match(name_pattern, repo_path):
-                error = (
+                raise ValidationError(
                     "Invalid repository name format. Must be lowercase alphanumeric "
                     "with dots, underscores, double underscores, or hyphens as separators"
                 )
-                logger.error(error, extra={"image": image, "repo_path": repo_path})
-                return False, error
         # No registry, just repository name
         else:
             if not re.match(name_pattern, name_part):
-                error = (
+                raise ValidationError(
                     "Invalid image name format. Must be lowercase alphanumeric "
                     "with dots, underscores, double underscores, or hyphens as separators"
                 )
-                logger.error(error, extra={"image": image})
-                return False, error
 
         if len(image) > 255:
-            error = f"Image reference too long ({len(image)} chars, recommended max 255)"
-            logger.warning(error, extra={"image": image})
-            return False, error
+            raise ValidationError(
+                f"Image reference too long ({len(image)} chars, recommended max 255)"
+            )
 
         logger.debug(f"Validated image: {image}")
-        return True, None
 
-    def _validate_port(self, port: int) -> tuple[bool, str | None]:
+    def _validate_port(self, port: int) -> None:
         """
         Validate port number.
 
         Args:
             port: Port number
 
-        Returns:
-            tuple: (is_valid: bool, error_message: str or None)
+        Raises:
+            ValidationError: If port is invalid
         """
         if not isinstance(port, int):
-            error = f"Port must be an integer, got {type(port).__name__}"
-            logger.error(error, extra={"port": port, "type": type(port).__name__})
-            return False, error
+            raise ValidationError(f"Port must be an integer, got {type(port).__name__}")
 
         if not (1 <= port <= 65535):
-            error = f"Port must be between 1-65535, got {port}"
-            logger.error(error, extra={"port": port})
-            return False, error
+            raise ValidationError(f"Port must be between 1-65535, got {port}")
 
         logger.debug(f"Validated port: {port}")
-        return True, None
 
-    def _parse_yaml_manifest(self, yaml_content: str, namespace: str) -> dict | None:
+    def _parse_yaml_manifest(self, yaml_content: str, namespace: str) -> dict:
         """
         Parse YAML content and ensure namespace is set.
 
@@ -177,7 +153,10 @@ class KubernetesClient:
             namespace: Namespace to set in manifest
 
         Returns:
-            Parsed manifest dict, or None on error
+            Parsed manifest dict
+
+        Raises:
+            KubernetesError: If YAML parsing fails
         """
         try:
             manifest = safe_load(yaml_content)
@@ -189,8 +168,7 @@ class KubernetesClient:
 
             return manifest
         except Exception as e:
-            logger.error(f"Error parsing YAML: {e}", extra={"namespace": namespace})
-            return None
+            raise KubernetesError(f"Failed to parse YAML manifest: {e}") from e
 
     def _is_traefik_crd(self, manifest: dict) -> bool:
         """
@@ -205,7 +183,7 @@ class KubernetesClient:
         api_version = manifest.get("apiVersion", "")
         return "traefik.io" in api_version or "traefik.containo.us" in api_version
 
-    def _apply_traefik_crd(self, manifest: dict, namespace: str) -> bool:
+    def _apply_traefik_crd(self, manifest: dict, namespace: str) -> None:
         """
         Apply Traefik Custom Resource with create-or-update logic.
 
@@ -213,8 +191,8 @@ class KubernetesClient:
             manifest: Traefik CRD manifest
             namespace: Namespace to apply to
 
-        Returns:
-            True if successful, False otherwise
+        Raises:
+            KubernetesError: If operation fails
         """
         kind = manifest.get("kind", "Resource")
         api_version = manifest.get("apiVersion", "")
@@ -242,28 +220,20 @@ class KubernetesClient:
                         "namespace": namespace,
                     },
                 )
-                return True
             except ApiException as e:
                 if e.status == 409:
                     # Resource already exists, update it
-                    return self._update_traefik_crd(
+                    self._update_traefik_crd(
                         custom_api, group, version, namespace, plural, resource_name, manifest
                     )
                 else:
-                    logger.error(
-                        f"Kubernetes API error creating {kind}",
-                        extra={
-                            "kind": kind,
-                            "resource_name": resource_name,
-                            "namespace": namespace,
-                        },
-                    )
-                    return False
+                    raise KubernetesError(
+                        f"Failed to create {kind} {resource_name}: {e.reason}"
+                    ) from e
+        except KubernetesError:
+            raise
         except Exception as e:
-            logger.error(
-                f"Error applying Traefik CRD: {e}", extra={"kind": kind, "namespace": namespace}
-            )
-            return False
+            raise KubernetesError(f"Error applying Traefik CRD {kind}: {e}") from e
 
     def _update_traefik_crd(
         self,
@@ -274,7 +244,7 @@ class KubernetesClient:
         plural: str,
         name: str,
         manifest: dict,
-    ) -> bool:
+    ) -> None:
         """
         Update an existing Traefik CRD with proper resourceVersion.
 
@@ -287,8 +257,8 @@ class KubernetesClient:
             name: Resource name
             manifest: Updated manifest
 
-        Returns:
-            True if successful, False otherwise
+        Raises:
+            KubernetesError: If update fails
         """
         kind = manifest.get("kind", "Resource")
 
@@ -324,15 +294,10 @@ class KubernetesClient:
                 f"Updated {kind}: {name}",
                 extra={"kind": kind, "resource_name": name, "namespace": namespace},
             )
-            return True
         except ApiException as e:
-            logger.error(
-                f"Failed to update {kind}: {e}",
-                extra={"kind": kind, "resource_name": name, "namespace": namespace},
-            )
-            return False
+            raise KubernetesError(f"Failed to update {kind} {name}: {e.reason}") from e
 
-    def _apply_standard_resource(self, manifest: dict, namespace: str) -> bool:
+    def _apply_standard_resource(self, manifest: dict, namespace: str) -> None:
         """
         Apply standard Kubernetes resource with create-or-update logic.
 
@@ -342,8 +307,8 @@ class KubernetesClient:
             manifest: Kubernetes resource manifest
             namespace: Namespace to apply to
 
-        Returns:
-            True if successful, False otherwise
+        Raises:
+            KubernetesError: If operation fails
         """
         kind = manifest.get("kind", "Resource")
         resource_name = manifest.get("metadata", {}).get("name", "unknown")
@@ -355,7 +320,6 @@ class KubernetesClient:
                 f"Created {kind}: {resource_name}",
                 extra={"kind": kind, "resource_name": resource_name, "namespace": namespace},
             )
-            return True
         except (FailToCreateError, ApiException) as e:
             is_conflict = False
 
@@ -373,27 +337,21 @@ class KubernetesClient:
                         "namespace": namespace,
                     },
                 )
-                return self._update_standard_resource(manifest, namespace, kind, resource_name)
+                self._update_standard_resource(manifest, namespace, kind, resource_name)
             else:
-                logger.error(
-                    "Kubernetes API error applying YAML",
-                    extra={
-                        "kind": kind,
-                        "namespace": namespace,
-                        "status": e.status,
-                        "reason": e.reason,
-                    },
-                )
-                return False
+                # Real failure - raise exception
+                error_msg = f"Failed to apply {kind} {resource_name}"
+                if isinstance(e, ApiException):
+                    error_msg += f": {e.reason}"
+                raise KubernetesError(error_msg) from e
+        except KubernetesError:
+            raise
         except Exception as e:
-            logger.error(
-                f"Error applying {kind}: {e}", extra={"kind": kind, "namespace": namespace}
-            )
-            return False
+            raise KubernetesError(f"Error applying {kind} {resource_name}: {e}") from e
 
     def _update_standard_resource(
         self, manifest: dict, namespace: str, kind: str, name: str
-    ) -> bool:
+    ) -> None:
         """
         Update an existing standard Kubernetes resource.
 
@@ -405,8 +363,8 @@ class KubernetesClient:
             kind: Resource kind (Deployment, Service, Ingress, etc.)
             name: Resource name
 
-        Returns:
-            True if successful, False otherwise
+        Raises:
+            KubernetesError: If update fails
         """
         try:
             if kind == "Deployment":
@@ -421,30 +379,16 @@ class KubernetesClient:
                     name=name, namespace=namespace, body=manifest
                 )
             else:
-                logger.warning(
-                    f"Update not implemented for kind: {kind}",
-                    extra={"kind": kind, "resource_name": name, "namespace": namespace},
-                )
-                return False
+                raise KubernetesError(f"Update not implemented for resource kind: {kind}")
 
             logger.info(
                 f"Updated {kind}: {name}",
                 extra={"kind": kind, "resource_name": name, "namespace": namespace},
             )
-            return True
         except ApiException as e:
-            logger.error(
-                f"Failed to update {kind}",
-                extra={
-                    "kind": kind,
-                    "resource_name": name,
-                    "namespace": namespace,
-                    "status": e.status,
-                },
-            )
-            return False
+            raise KubernetesError(f"Failed to update {kind} {name}: {e.reason}") from e
 
-    def _apply_yaml(self, yaml_content: str, namespace: str) -> bool:
+    def _apply_yaml(self, yaml_content: str, namespace: str) -> None:
         """
         Apply YAML manifest to Kubernetes cluster.
 
@@ -454,18 +398,16 @@ class KubernetesClient:
             yaml_content: YAML string to apply
             namespace: Namespace to apply resources to
 
-        Returns:
-            True if successful, False otherwise
+        Raises:
+            KubernetesError: If operation fails
         """
         manifest = self._parse_yaml_manifest(yaml_content, namespace)
-        if not manifest:
-            return False
 
         # Route to appropriate handler based on resource type
         if self._is_traefik_crd(manifest):
-            return self._apply_traefik_crd(manifest, namespace)
+            self._apply_traefik_crd(manifest, namespace)
         else:
-            return self._apply_standard_resource(manifest, namespace)
+            self._apply_standard_resource(manifest, namespace)
 
     def create_namespace(self, name: str) -> bool:
         """
@@ -475,11 +417,13 @@ class KubernetesClient:
             name: Name of the namespace to create
 
         Returns:
-            True if successful, False otherwise
+            True if successful (includes case where namespace already exists)
+
+        Raises:
+            ValidationError: If name validation fails
+            KubernetesError: If creation fails (except for already exists)
         """
-        is_valid, error_msg = self._validate_k8s_name(name, "namespace")
-        if not is_valid:
-            return False
+        self._validate_k8s_name(name, "namespace")
 
         try:
             namespace = client.V1Namespace(metadata=client.V1ObjectMeta(name=name))
@@ -488,14 +432,11 @@ class KubernetesClient:
             return True
         except ApiException as e:
             if e.status == 409:
-                logger.warning(f"Namespace {name} already exists", extra={"namespace": name})
+                # Namespace already exists
+                logger.info(f"Namespace {name} already exists", extra={"namespace": name})
                 return True
             else:
-                logger.error(
-                    f"Error creating namespace: {e}",
-                    extra={"namespace": name, "status": e.status, "reason": e.reason},
-                )
-                return False
+                raise KubernetesError(f"Failed to create namespace {name}: {e.reason}") from e
 
     def delete_namespace(self, name: str) -> bool:
         """
@@ -505,11 +446,13 @@ class KubernetesClient:
             name: Name of the namespace to delete
 
         Returns:
-            True if successful, False otherwise
+            True if deleted, False if not found
+
+        Raises:
+            ValidationError: If name validation fails
+            KubernetesError: If deletion fails (except for not found)
         """
-        is_valid, error_msg = self._validate_k8s_name(name, "namespace")
-        if not is_valid:
-            return False
+        self._validate_k8s_name(name, "namespace")
 
         try:
             self.v1.delete_namespace(name)
@@ -517,13 +460,13 @@ class KubernetesClient:
             return True
         except ApiException as e:
             if e.status == 404:
-                logger.warning(f"Namespace {name} not found", extra={"namespace": name})
-            else:
-                logger.error(
-                    f"Error deleting namespace: {e}",
-                    extra={"namespace": name, "status": e.status, "reason": e.reason},
+                # Namespace doesn't exist
+                logger.info(
+                    f"Namespace {name} not found (already deleted)", extra={"namespace": name}
                 )
-            return False
+                return False
+            else:
+                raise KubernetesError(f"Failed to delete namespace {name}: {e.reason}") from e
 
     def list_namespaces(self) -> list[str]:
         """
@@ -531,6 +474,9 @@ class KubernetesClient:
 
         Returns:
             List of namespace names
+
+        Raises:
+            KubernetesError: If listing fails
         """
         try:
             namespaces = self.v1.list_namespace()
@@ -539,8 +485,7 @@ class KubernetesClient:
             logger.debug(f"Namespaces: {', '.join(namespace_names)}")
             return namespace_names
         except ApiException as e:
-            logger.error(f"Error listing namespaces: {e}", extra={"status": e.status})
-            return []
+            raise KubernetesError(f"Failed to list namespaces: {e.reason}") from e
 
     def namespace_exists(self, name: str) -> bool:
         """
@@ -550,11 +495,13 @@ class KubernetesClient:
             name: Name of the namespace to check
 
         Returns:
-            True if exists, False otherwise
+            True if exists, False if not found
+
+        Raises:
+            ValidationError: If name validation fails
+            KubernetesError: If check fails (except for not found)
         """
-        is_valid, error_msg = self._validate_k8s_name(name, "namespace")
-        if not is_valid:
-            return False
+        self._validate_k8s_name(name, "namespace")
 
         try:
             self.v1.read_namespace(name)
@@ -564,8 +511,7 @@ class KubernetesClient:
             if e.status == 404:
                 logger.debug(f"Namespace {name} does not exist")
                 return False
-            logger.error(f"Error checking namespace existence: {e}")
-            raise
+            raise KubernetesError(f"Failed to check namespace existence: {e.reason}") from e
 
     def create_deployment(
         self,
@@ -575,7 +521,7 @@ class KubernetesClient:
         port: int,
         template_dir: str,
         env_vars: dict[str, str] | None = None,
-    ) -> bool:
+    ) -> None:
         """
         Create a deployment using templates.
 
@@ -587,29 +533,20 @@ class KubernetesClient:
             env_vars: Optional dict of environment variables
             template_dir: Directory containing templates (default: automation/templates/)
 
-        Returns:
-            True if successful, False otherwise
+        Raises:
+            ValidationError: If input validation fails
+            TemplateError: If template rendering fails
+            KubernetesError: If deployment creation fails
         """
         logger.info(
             f"Creating deployment: {name}",
             extra={"deployment": name, "namespace": namespace, "image": image, "port": port},
         )
 
-        is_valid, error_msg = self._validate_k8s_name(name, "deployment")
-        if not is_valid:
-            return False
-
-        is_valid, error_msg = self._validate_k8s_name(namespace, "namespace")
-        if not is_valid:
-            return False
-
-        is_valid, error_msg = self._validate_image_name(image)
-        if not is_valid:
-            return False
-
-        is_valid, error_msg = self._validate_port(port)
-        if not is_valid:
-            return False
+        self._validate_k8s_name(name, "deployment")
+        self._validate_k8s_name(namespace, "namespace")
+        self._validate_image_name(image)
+        self._validate_port(port)
 
         data = {
             "name": name,
@@ -620,14 +557,11 @@ class KubernetesClient:
         }
 
         yaml_content = render_template("deployment.yaml.j2", data, template_dir)
-        if not yaml_content:
-            return False
-
-        return self._apply_yaml(yaml_content, namespace)
+        self._apply_yaml(yaml_content, namespace)
 
     def create_service(
         self, name: str, namespace: str, port: int, target_port: int, template_dir: str
-    ) -> bool:
+    ) -> None:
         """
         Create a service using templates.
 
@@ -640,8 +574,10 @@ class KubernetesClient:
             target_port: Port on the pod to forward traffic to (container port)
             template_dir: Directory containing templates (default: templates/)
 
-        Returns:
-            True if successful, False otherwise
+        Raises:
+            ValidationError: If input validation fails
+            TemplateError: If template rendering fails
+            KubernetesError: If service creation fails
         """
         logger.info(
             f"Creating service: {name}",
@@ -653,35 +589,19 @@ class KubernetesClient:
             },
         )
 
-        is_valid, error_msg = self._validate_k8s_name(name, "service")
-        if not is_valid:
-            return False
-
-        is_valid, error_msg = self._validate_k8s_name(namespace, "namespace")
-        if not is_valid:
-            return False
-
-        is_valid, error_msg = self._validate_port(port)
-        if not is_valid:
-            logger.error("Invalid service port", extra={"port": port})
-            return False
-
-        is_valid, error_msg = self._validate_port(target_port)
-        if not is_valid:
-            logger.error("Invalid target port", extra={"target_port": target_port})
-            return False
+        self._validate_k8s_name(name, "service")
+        self._validate_k8s_name(namespace, "namespace")
+        self._validate_port(port)
+        self._validate_port(target_port)
 
         data = {"name": name, "namespace": namespace, "port": port, "target_port": target_port}
 
         yaml_content = render_template("service.yaml.j2", data, template_dir)
-        if not yaml_content:
-            return False
-
-        return self._apply_yaml(yaml_content, namespace)
+        self._apply_yaml(yaml_content, namespace)
 
     def create_middleware(
         self, name: str, namespace: str, prefixes: list[str], template_dir: str
-    ) -> bool:
+    ) -> None:
         """
         Create a Traefik Middleware using templates.
 
@@ -691,29 +611,23 @@ class KubernetesClient:
             prefixes: List of path prefixes to strip (e.g., ['/pr-999'])
             template_dir: Directory containing templates
 
-        Returns:
-            True if successful, False otherwise
+        Raises:
+            ValidationError: If input validation fails
+            TemplateError: If template rendering fails
+            KubernetesError: If middleware creation fails
         """
         logger.info(
             f"Creating middleware: {name}",
             extra={"middleware": name, "namespace": namespace, "prefixes": prefixes},
         )
 
-        is_valid, error_msg = self._validate_k8s_name(name, "middleware")
-        if not is_valid:
-            return False
-
-        is_valid, error_msg = self._validate_k8s_name(namespace, "namespace")
-        if not is_valid:
-            return False
+        self._validate_k8s_name(name, "middleware")
+        self._validate_k8s_name(namespace, "namespace")
 
         data = {"name": name, "namespace": namespace, "prefixes": prefixes}
 
         yaml_content = render_template("middleware.yaml.j2", data, template_dir)
-        if not yaml_content:
-            return False
-
-        return self._apply_yaml(yaml_content, namespace)
+        self._apply_yaml(yaml_content, namespace)
 
     def create_ingress(
         self,
@@ -724,7 +638,7 @@ class KubernetesClient:
         service_port: int,
         middleware_name: str,
         template_dir: str,
-    ) -> bool:
+    ) -> None:
         """
         Create an Ingress resource using templates.
 
@@ -737,8 +651,10 @@ class KubernetesClient:
             middleware_name: Name of the middleware to use (e.g., 'stripprefix')
             template_dir: Directory containing templates
 
-        Returns:
-            True if successful, False otherwise
+        Raises:
+            ValidationError: If input validation fails
+            TemplateError: If template rendering fails
+            KubernetesError: If ingress creation fails
         """
         logger.info(
             f"Creating ingress: {name}",
@@ -750,18 +666,9 @@ class KubernetesClient:
             },
         )
 
-        is_valid, error_msg = self._validate_k8s_name(name, "ingress")
-        if not is_valid:
-            return False
-
-        is_valid, error_msg = self._validate_k8s_name(namespace, "namespace")
-        if not is_valid:
-            return False
-
-        is_valid, error_msg = self._validate_port(service_port)
-        if not is_valid:
-            logger.error("Invalid service port", extra={"service_port": service_port})
-            return False
+        self._validate_k8s_name(name, "ingress")
+        self._validate_k8s_name(namespace, "namespace")
+        self._validate_port(service_port)
 
         data = {
             "name": name,
@@ -773,7 +680,4 @@ class KubernetesClient:
         }
 
         yaml_content = render_template("ingress.yaml.j2", data, template_dir)
-        if not yaml_content:
-            return False
-
-        return self._apply_yaml(yaml_content, namespace)
+        self._apply_yaml(yaml_content, namespace)

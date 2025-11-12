@@ -17,6 +17,7 @@ from automation.constants import (
     DEFAULT_CONFIG_PATH,
     DEFAULT_LOG_FILE,
     DEFAULT_TEMPLATE_DIR,
+    NAMESPACE_PREFIX,
 )
 from automation.exceptions import (
     ConfigError,
@@ -75,7 +76,7 @@ def main() -> None:
 
     logger = get_logger(__name__)
 
-    namespace = f"pr-{args.pr_number}"
+    namespace = f"{NAMESPACE_PREFIX}{args.pr_number}"
 
     logger.info(
         f"Starting {args.action} operation",
@@ -213,7 +214,7 @@ def create_environment(
         # Post/update GitHub comment if integration is enabled
         if github and ingress_created:
             try:
-                pr_number = int(namespace.replace("pr-", ""))
+                pr_number = int(namespace.replace(NAMESPACE_PREFIX, ""))
 
                 # Build comment message with links to all ingress-enabled services
                 service_links = []

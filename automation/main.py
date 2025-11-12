@@ -18,6 +18,8 @@ from automation.constants import (
     DEFAULT_LOG_FILE,
     DEFAULT_TEMPLATE_DIR,
     NAMESPACE_PREFIX,
+    PORT_FORWARD_OFFSET,
+    STRIPPREFIX_MIDDLEWARE,
 )
 from automation.exceptions import (
     ConfigError,
@@ -168,7 +170,7 @@ def create_environment(
 
         # Create middleware for path stripping
         k8s.create_middleware(
-            name="stripprefix",
+            name={STRIPPREFIX_MIDDLEWARE},
             namespace=namespace,
             prefixes=[f"/{namespace}"],
             template_dir=template_dir,
@@ -187,7 +189,7 @@ def create_environment(
                     path=full_path,
                     service_name=service["name"],
                     service_port=service["port"],
-                    middleware_name="stripprefix",
+                    middleware_name=STRIPPREFIX_MIDDLEWARE,
                     template_dir=template_dir,
                 )
 
@@ -206,7 +208,7 @@ def create_environment(
 
         logger.info("Access services directly with kubectl port-forward:")
         for service in config["services"]:
-            local_port = service["port"] + 1000
+            local_port = service["port"] + PORT_FORWARD_OFFSET
             logger.info(
                 f"  kubectl port-forward -n {namespace} svc/{service['name']} {local_port}:{service['port']}"
             )

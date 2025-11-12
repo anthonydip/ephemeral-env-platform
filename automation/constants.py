@@ -28,6 +28,13 @@ MAX_PORT = 65535
 MAX_IMAGE_LENGTH = 255
 
 # ============================================================================
+# Traefik Configuration
+# ============================================================================
+
+# Name of the StripPrefix middleware for path routing
+STRIPPREFIX_MIDDLEWARE = "stripprefix"
+
+# ============================================================================
 # Default Paths
 # ============================================================================
 
@@ -39,3 +46,10 @@ DEFAULT_TEMPLATE_DIR = "automation/templates/"
 
 # Default log file path
 DEFAULT_LOG_FILE = "logs/ephemeral-env.log"
+
+# ============================================================================
+# Port Configuration
+# ============================================================================
+
+# Offset added to service ports for kubectl port-forward suggestions
+PORT_FORWARD_OFFSET = 1000

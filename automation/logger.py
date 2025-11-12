@@ -57,6 +57,9 @@ def setup_logging(
         file_handler.setFormatter(detailed_formatter)
         root_logger.addHandler(file_handler)
 
+    logging.getLogger("kubernetes").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+
 
 def get_logger(name: str) -> logging.Logger:
     """

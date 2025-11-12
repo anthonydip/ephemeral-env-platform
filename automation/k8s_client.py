@@ -11,6 +11,11 @@ from kubernetes.client.rest import ApiException
 from kubernetes.utils import FailToCreateError
 from yaml import safe_load
 
+from automation.constants import (
+    MAX_K8S_NAME_LENGTH,
+    MAX_PORT,
+    MIN_PORT,
+)
 from automation.exceptions import KubernetesError, ValidationError
 from automation.logger import get_logger
 from automation.template_renderer import render_template
@@ -51,9 +56,9 @@ class KubernetesClient:
         if not name:
             raise ValidationError(f"{resource_type.capitalize()} name cannot be empty")
 
-        if len(name) > 63:
+        if len(name) > MAX_K8S_NAME_LENGTH:
             raise ValidationError(
-                f"{resource_type.capitalize()} name too long (max 63 chars, got {len(name)})"
+                f"{resource_type.capitalize()} name too long (max {MAX_K8S_NAME_LENGTH} chars, got {len(name)})"
             )
 
         # Lowercase alphanumeric + hyphens, start/end with alphanumeric
@@ -139,8 +144,8 @@ class KubernetesClient:
         if not isinstance(port, int):
             raise ValidationError(f"Port must be an integer, got {type(port).__name__}")
 
-        if not (1 <= port <= 65535):
-            raise ValidationError(f"Port must be between 1-65535, got {port}")
+        if not (MIN_PORT <= port <= MAX_PORT):
+            raise ValidationError(f"Port must be between {MIN_PORT}-{MAX_PORT}, got {port}")
 
         logger.debug(f"Validated port: {port}")
 

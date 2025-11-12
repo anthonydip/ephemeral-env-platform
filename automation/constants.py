@@ -12,6 +12,22 @@ Centralized location for all magic strings, numbers, and configuration values.
 NAMESPACE_PREFIX = "pr-"
 
 # ============================================================================
+# Kubernetes Validation Limits
+# ============================================================================
+
+# Maximum length for Kubernetes resource names (RFC 1123)
+MAX_K8S_NAME_LENGTH = 63
+
+# Minimum valid port number
+MIN_PORT = 1
+
+# Maximum valid port number
+MAX_PORT = 65535
+
+# Recommended maximum image length for Docker image references
+MAX_IMAGE_LENGTH = 255
+
+# ============================================================================
 # Default Paths
 # ============================================================================
 

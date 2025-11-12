@@ -67,6 +67,11 @@ def main() -> None:
         default=os.getenv(LOG_LEVEL, "INFO"),
         help="Set logging level (default: INFO)",
     )
+    parser.add_argument(
+        "--skip-github",
+        action="store_true",
+        help="Skip GitHub integration (don't post PR comments)",
+    )
 
     args = parser.parse_args()
 
@@ -102,14 +107,17 @@ def main() -> None:
     github_token = os.getenv(GITHUB_TOKEN)
     github_repo = os.getenv(GITHUB_REPO)
 
-    if github_token and github_repo:
+    if args.skip_github:
+        logger.info("GitHub integration disabled, skipped via --skip-github flag")
+        github = None
+    elif github_token and github_repo:
         try:
             github = GithubClient(token=github_token, repo_name=github_repo)
         except Exception as e:
             logger.warning(f"GitHub integration disabled: {e}")
             github = None
     else:
-        logger.info(f"GitHub integration disabled - missing {GITHUB_TOKEN} or {GITHUB_REPO}")
+        logger.info(f"GitHub integration disabled, missing {GITHUB_TOKEN} or {GITHUB_REPO}")
         github = None
 
     if args.action == "create":

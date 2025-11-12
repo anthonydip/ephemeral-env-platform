@@ -12,6 +12,29 @@ Centralized location for all magic strings, numbers, and configuration values.
 NAMESPACE_PREFIX = "pr-"
 
 # ============================================================================
+# Configuration Parsing
+# ============================================================================
+
+# Required fields for service configuration
+REQUIRED_SERVICE_FIELDS = ["name", "image", "port"]
+
+# ============================================================================
+# Jinja2 Template Files
+# ============================================================================
+
+# Deployment template file name
+DEPLOYMENT_TEMPLATE = "deployment.yaml.j2"
+
+# Service template file name
+SERVICE_TEMPLATE = "service.yaml.j2"
+
+# Middleware template file name
+MIDDLEWARE_TEMPLATE = "middleware.yaml.j2"
+
+# Ingress template file name
+INGRESS_TEMPLATE = "ingress.yaml.j2"
+
+# ============================================================================
 # Kubernetes Validation Limits
 # ============================================================================
 
@@ -35,6 +58,13 @@ MAX_IMAGE_LENGTH = 255
 STRIPPREFIX_MIDDLEWARE = "stripprefix"
 
 # ============================================================================
+# GitHub Configuration
+# ============================================================================
+
+# Marker to identify preview environment comments
+PREVIEW_READY_MARKER = "🚀 **Preview Environment Ready!**"
+
+# ============================================================================
 # Default Paths
 # ============================================================================
 
@@ -53,3 +83,22 @@ DEFAULT_LOG_FILE = "logs/ephemeral-env.log"
 
 # Offset added to service ports for kubectl port-forward suggestions
 PORT_FORWARD_OFFSET = 1000
+
+# ============================================================================
+# Environment Variable Names
+# ============================================================================
+
+# GitHub access token
+GITHUB_TOKEN = "GITHUB_TOKEN"
+
+# GitHub repository (format owner/repo)
+GITHUB_REPO = "GITHUB_REPO"
+
+# Logging level
+LOG_LEVEL = "LOG_LEVEL"
+
+# Log file path
+LOG_FILE = "LOG_FILE"
+
+# EC2 public IP
+EC2_PUBLIC_IP = "EC2_PUBLIC_IP"

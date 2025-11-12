@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from github import Auth, Github, GithubException
 
+from automation.constants import PREVIEW_READY_MARKER
 from automation.exceptions import GitHubError
 from automation.logger import get_logger
 
@@ -78,7 +79,7 @@ class GithubClient:
 
             # Search for bot's comment
             for comment in comments:
-                if "🚀 **Preview Environment Ready!**" in comment.body:
+                if PREVIEW_READY_MARKER in comment.body:
                     logger.info(
                         f"Found existing bot comment {comment.id} on PR #{pr_number}",
                         extra={"pr_number": pr_number, "comment_id": comment.id},

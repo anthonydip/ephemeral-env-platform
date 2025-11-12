@@ -17,8 +17,14 @@ from automation.constants import (
     DEFAULT_CONFIG_PATH,
     DEFAULT_LOG_FILE,
     DEFAULT_TEMPLATE_DIR,
+    EC2_PUBLIC_IP,
+    GITHUB_REPO,
+    GITHUB_TOKEN,
+    LOG_FILE,
+    LOG_LEVEL,
     NAMESPACE_PREFIX,
     PORT_FORWARD_OFFSET,
+    PREVIEW_READY_MARKER,
     STRIPPREFIX_MIDDLEWARE,
 )
 from automation.exceptions import (
@@ -58,14 +64,14 @@ def main() -> None:
     parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default=os.getenv("LOG_LEVEL", "INFO"),
+        default=os.getenv(LOG_LEVEL, "INFO"),
         help="Set logging level (default: INFO)",
     )
 
     args = parser.parse_args()
 
     # Determine log file path
-    log_file_env = os.getenv("LOG_FILE")
+    log_file_env = os.getenv(LOG_FILE)
     if log_file_env == "":
         log_file = None
     elif log_file_env is None:
@@ -93,8 +99,8 @@ def main() -> None:
         sys.exit(1)
 
     # Initialize GitHub client (optional)
-    github_token = os.getenv("GITHUB_TOKEN")
-    github_repo = os.getenv("GITHUB_REPO")
+    github_token = os.getenv(GITHUB_TOKEN)
+    github_repo = os.getenv(GITHUB_REPO)
 
     if github_token and github_repo:
         try:
@@ -103,7 +109,7 @@ def main() -> None:
             logger.warning(f"GitHub integration disabled: {e}")
             github = None
     else:
-        logger.info("GitHub integration disabled - missing GITHUB_TOKEN or GITHUB_REPO")
+        logger.info(f"GitHub integration disabled - missing {GITHUB_TOKEN} or {GITHUB_REPO}")
         github = None
 
     if args.action == "create":
@@ -170,7 +176,7 @@ def create_environment(
 
         # Create middleware for path stripping
         k8s.create_middleware(
-            name={STRIPPREFIX_MIDDLEWARE},
+            name=STRIPPREFIX_MIDDLEWARE,
             namespace=namespace,
             prefixes=[f"/{namespace}"],
             template_dir=template_dir,
@@ -199,7 +205,7 @@ def create_environment(
                     extra={"namespace": namespace, "service": service["name"], "path": full_path},
                 )
 
-        ec2_ip = os.getenv("EC2_PUBLIC_IP", "<EC2-IP>")
+        ec2_ip = os.getenv(EC2_PUBLIC_IP, "<EC2-IP>")
 
         if ingress_created:
             logger.info(f"Preview environment accessible at: http://{ec2_ip}/{namespace}/")
@@ -228,7 +234,7 @@ def create_environment(
 
                 links_text = "\n".join(service_links)
 
-                message = f"🚀 **Preview Environment Ready!**\n\n{links_text}\n\nThe environment will be automatically deleted when this PR is closed."
+                message = f"{PREVIEW_READY_MARKER}\n\n{links_text}\n\nThe environment will be automatically deleted when this PR is closed."
 
                 # Check if comment already exists
                 existing_comment_id = github.find_bot_comment(pr_number)

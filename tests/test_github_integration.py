@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 import pytest
 from github import GithubException
 
+from automation.constants import PREVIEW_READY_MARKER
 from automation.exceptions import GitHubError
 from automation.github_integration import GithubClient
 
@@ -81,7 +82,7 @@ def test_find_bot_comment_success(mock_github_client):
 
     comment2 = Mock()
     comment2.id = 222
-    comment2.body = "🚀 **Preview Environment Ready!**\n\nFrontend: http://..."
+    comment2.body = f"{PREVIEW_READY_MARKER}\n\nFrontend: http://..."
 
     comment3 = Mock()
     comment3.id = 333

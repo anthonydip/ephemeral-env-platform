@@ -12,6 +12,10 @@ import time
 import pytest
 from kubernetes import client
 
+from automation.constants import (
+    DEFAULT_TEMPLATE_DIR,
+    STRIPPREFIX_MIDDLEWARE,
+)
 from automation.k8s_client import KubernetesClient
 
 pytestmark = pytest.mark.integration
@@ -79,7 +83,7 @@ def test_create_deployment_without_env(k8s_client, test_namespace):
         namespace=test_namespace,
         image="nginx:latest",
         port=80,
-        template_dir="automation/templates/",
+        template_dir=DEFAULT_TEMPLATE_DIR,
         env_vars=None,
     )
 
@@ -99,7 +103,7 @@ def test_create_deployment_with_env_vars(k8s_client, test_namespace):
         namespace=test_namespace,
         image="postgres:15",
         port=5432,
-        template_dir="automation/templates/",
+        template_dir=DEFAULT_TEMPLATE_DIR,
         env_vars={"POSTGRES_PASSWORD": "testpassword", "POSTGRES_USER": "testuser"},
     )
 
@@ -125,7 +129,7 @@ def test_create_service(k8s_client, test_namespace):
         namespace=test_namespace,
         port=80,
         target_port=80,
-        template_dir="automation/templates/",
+        template_dir=DEFAULT_TEMPLATE_DIR,
     )
 
     assert result
@@ -148,7 +152,7 @@ def test_full_environment_creation(k8s_client, test_namespace):
         namespace=test_namespace,
         image="nginx:latest",
         port=80,
-        template_dir="automation/templates/",
+        template_dir=DEFAULT_TEMPLATE_DIR,
         env_vars=None,
     )
 
@@ -157,7 +161,7 @@ def test_full_environment_creation(k8s_client, test_namespace):
         namespace=test_namespace,
         port=80,
         target_port=80,
-        template_dir="automation/templates/",
+        template_dir=DEFAULT_TEMPLATE_DIR,
     )
 
     assert k8s_client.namespace_exists(test_namespace)
@@ -178,10 +182,10 @@ def test_create_middleware(k8s_client, test_namespace):
     k8s_client.create_namespace(test_namespace)
 
     result = k8s_client.create_middleware(
-        name="stripprefix",
+        name=STRIPPREFIX_MIDDLEWARE,
         namespace=test_namespace,
         prefixes=[f"/{test_namespace}"],
-        template_dir="automation/templates/",
+        template_dir=DEFAULT_TEMPLATE_DIR,
     )
 
     assert result
@@ -193,9 +197,9 @@ def test_create_middleware(k8s_client, test_namespace):
             version="v1alpha1",
             namespace=test_namespace,
             plural="middlewares",
-            name="stripprefix",
+            name=STRIPPREFIX_MIDDLEWARE,
         )
-        assert middleware["metadata"]["name"] == "stripprefix"
+        assert middleware["metadata"]["name"] == STRIPPREFIX_MIDDLEWARE
         assert middleware["spec"]["stripPrefix"]["prefixes"][0] == f"/{test_namespace}"
     except Exception as e:
         pytest.fail(f"Middleware not found or invalid: {e}")
@@ -211,15 +215,15 @@ def test_create_ingress(k8s_client, test_namespace):
         namespace=test_namespace,
         port=80,
         target_port=80,
-        template_dir="automation/templates/",
+        template_dir=DEFAULT_TEMPLATE_DIR,
     )
 
     # Create middleware
     k8s_client.create_middleware(
-        name="stripprefix",
+        name=STRIPPREFIX_MIDDLEWARE,
         namespace=test_namespace,
         prefixes=[f"/{test_namespace}"],
-        template_dir="automation/templates/",
+        template_dir=DEFAULT_TEMPLATE_DIR,
     )
 
     # Create ingress
@@ -229,8 +233,8 @@ def test_create_ingress(k8s_client, test_namespace):
         path=f"/{test_namespace}",
         service_name="test-app",
         service_port=80,
-        middleware_name="stripprefix",
-        template_dir="automation/templates/",
+        middleware_name=STRIPPREFIX_MIDDLEWARE,
+        template_dir=DEFAULT_TEMPLATE_DIR,
     )
 
     assert result
@@ -247,7 +251,7 @@ def test_create_ingress(k8s_client, test_namespace):
     assert ingress.spec.rules[0].http.paths[0].backend.service.port.number == 80
 
     # Verify middleware annotation
-    expected_middleware = f"{test_namespace}-stripprefix@kubernetescrd"
+    expected_middleware = f"{test_namespace}-{STRIPPREFIX_MIDDLEWARE}@kubernetescrd"
     assert (
         ingress.metadata.annotations["traefik.ingress.kubernetes.io/router.middlewares"]
         == expected_middleware
@@ -264,7 +268,7 @@ def test_full_stack_with_ingress(k8s_client, test_namespace):
         namespace=test_namespace,
         image="nginx:latest",
         port=80,
-        template_dir="automation/templates/",
+        template_dir=DEFAULT_TEMPLATE_DIR,
         env_vars=None,
     )
 
@@ -274,15 +278,15 @@ def test_full_stack_with_ingress(k8s_client, test_namespace):
         namespace=test_namespace,
         port=80,
         target_port=80,
-        template_dir="automation/templates/",
+        template_dir=DEFAULT_TEMPLATE_DIR,
     )
 
     # Create middleware
     assert k8s_client.create_middleware(
-        name="stripprefix",
+        name=STRIPPREFIX_MIDDLEWARE,
         namespace=test_namespace,
         prefixes=[f"/{test_namespace}"],
-        template_dir="automation/templates/",
+        template_dir=DEFAULT_TEMPLATE_DIR,
     )
 
     # Create ingress
@@ -292,8 +296,8 @@ def test_full_stack_with_ingress(k8s_client, test_namespace):
         path=f"/{test_namespace}/",
         service_name="frontend",
         service_port=80,
-        middleware_name="stripprefix",
-        template_dir="automation/templates/",
+        middleware_name=STRIPPREFIX_MIDDLEWARE,
+        template_dir=DEFAULT_TEMPLATE_DIR,
     )
 
     # Verify all resources exist

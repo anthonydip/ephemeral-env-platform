@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 import pytest
 from kubernetes.client.rest import ApiException
 
+from automation.constants import STRIPPREFIX_MIDDLEWARE
 from automation.exceptions import KubernetesError, TemplateError, ValidationError
 from automation.k8s_client import KubernetesClient
 
@@ -349,7 +350,10 @@ def test_create_middleware_success(mock_k8s_client, template_dir):
 
     with patch("automation.k8s_client.client.CustomObjectsApi", return_value=mock_custom_api):
         mock_k8s_client.create_middleware(
-            name="stripprefix", namespace="test-ns", prefixes=["/pr-123"], template_dir=template_dir
+            name=STRIPPREFIX_MIDDLEWARE,
+            namespace="test-ns",
+            prefixes=["/pr-123"],
+            template_dir=template_dir,
         )
 
     mock_custom_api.create_namespaced_custom_object.assert_called_once()
@@ -371,7 +375,7 @@ def test_create_ingress_success(mock_k8s_client, template_dir):
             path="/test",
             service_name="test-svc",
             service_port=80,
-            middleware_name="stripprefix",
+            middleware_name=STRIPPREFIX_MIDDLEWARE,
             template_dir=template_dir,
         )
 

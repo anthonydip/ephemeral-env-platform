@@ -13,6 +13,11 @@ import sys
 from dotenv import load_dotenv
 
 from automation.config_parser import load_config
+from automation.constants import (
+    DEFAULT_CONFIG_PATH,
+    DEFAULT_LOG_FILE,
+    DEFAULT_TEMPLATE_DIR,
+)
 from automation.exceptions import (
     ConfigError,
     GitHubError,
@@ -39,13 +44,13 @@ def main() -> None:
     parser.add_argument("pr_number", help="Pull request number")
     parser.add_argument(
         "--config",
-        default=".ephemeral-config.yaml",
-        help="Path to config file (default: .ephemeral-config.yaml)",
+        default=DEFAULT_CONFIG_PATH,
+        help=f"Path to config file (default: {DEFAULT_CONFIG_PATH})",
     )
     parser.add_argument(
         "--templates",
-        default="automation/templates/",
-        help="Path to templates directory (default: automation/templates/)",
+        default=DEFAULT_TEMPLATE_DIR,
+        help=f"Path to templates directory (default: {DEFAULT_TEMPLATE_DIR})",
     )
     parser.add_argument(
         "--log-level",
@@ -61,7 +66,7 @@ def main() -> None:
     if log_file_env == "":
         log_file = None
     elif log_file_env is None:
-        log_file = "logs/ephemeral-env.log"
+        log_file = DEFAULT_LOG_FILE
     else:
         log_file = log_file_env
 

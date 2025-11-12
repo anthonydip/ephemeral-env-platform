@@ -18,6 +18,7 @@ from jinja2 import (
     UndefinedError,
 )
 
+from automation.constants import DEFAULT_TEMPLATE_DIR
 from automation.exceptions import TemplateError
 from automation.logger import get_logger
 
@@ -25,7 +26,7 @@ logger = get_logger(__name__)
 
 
 def render_template(
-    template_name: str, data: dict[str, Any], template_dir: str = "automation/templates/"
+    template_name: str, data: dict[str, Any], template_dir: str = DEFAULT_TEMPLATE_DIR
 ) -> str:
     """
     Render Jinja2 template with provided data.

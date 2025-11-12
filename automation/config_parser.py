@@ -12,6 +12,7 @@ from typing import Any
 
 from yaml import YAMLError, safe_load
 
+from automation.constants import REQUIRED_SERVICE_FIELDS
 from automation.exceptions import ConfigError
 from automation.logger import get_logger
 
@@ -86,9 +87,7 @@ def _validate_service(service: dict, index: int, config_path: str) -> None:
             f"Service at index {index} must be a dictionary, got {type(service).__name__}"
         )
 
-    required_fields = ["name", "image", "port"]
-
-    for field in required_fields:
+    for field in REQUIRED_SERVICE_FIELDS:
         if field not in service:
             service_name = service.get("name", f"service at index {index}")
             raise ConfigError(f"Service '{service_name}' missing required field: '{field}'")

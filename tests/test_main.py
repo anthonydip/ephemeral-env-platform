@@ -6,6 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from automation.constants import EC2_PUBLIC_IP
 from automation.exceptions import GitHubError, KubernetesError
 from automation.main import create_environment, delete_environment
 
@@ -85,7 +86,7 @@ def test_create_environment_with_github_comment_new(
     mock_k8s_client, mock_github_client, test_config_file, template_dir, monkeypatch
 ):
     """Test environment creation posts new GitHub comment."""
-    monkeypatch.setenv("EC2_PUBLIC_IP", "1.2.3.4")
+    monkeypatch.setenv(EC2_PUBLIC_IP, "1.2.3.4")
 
     mock_github_client.find_bot_comment.return_value = None
 
@@ -116,7 +117,7 @@ def test_create_environment_with_github_comment_update(
     mock_k8s_client, mock_github_client, test_config_file, template_dir, monkeypatch
 ):
     """Test that existing comment is updated, not duplicated."""
-    monkeypatch.setenv("EC2_PUBLIC_IP", "1.2.3.4")
+    monkeypatch.setenv(EC2_PUBLIC_IP, "1.2.3.4")
 
     mock_github_client.find_bot_comment.return_value = 987654321
 
@@ -281,7 +282,7 @@ def test_create_environment_github_exception_handled(
     mock_k8s_client, mock_github_client, test_config_file, template_dir, monkeypatch
 ):
     """Test that GitHub exceptions don't break environment creation."""
-    monkeypatch.setenv("EC2_PUBLIC_IP", "1.2.3.4")
+    monkeypatch.setenv(EC2_PUBLIC_IP, "1.2.3.4")
 
     mock_github_client.post_comment.side_effect = GitHubError("GitHub API error")
 
@@ -300,7 +301,7 @@ def test_create_environment_github_comment_includes_all_ingress_services(
     mock_k8s_client, mock_github_client, test_config_file, template_dir, monkeypatch
 ):
     """Test that GitHub comment includes all ingress-enabled services."""
-    monkeypatch.setenv("EC2_PUBLIC_IP", "10.20.30.40")
+    monkeypatch.setenv(EC2_PUBLIC_IP, "10.20.30.40")
 
     result = create_environment(
         k8s=mock_k8s_client,

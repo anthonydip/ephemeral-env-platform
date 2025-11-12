@@ -11,6 +11,16 @@ from kubernetes.client.rest import ApiException
 from kubernetes.utils import FailToCreateError
 from yaml import safe_load
 
+from automation.constants import (
+    DEPLOYMENT_TEMPLATE,
+    INGRESS_TEMPLATE,
+    MAX_IMAGE_LENGTH,
+    MAX_K8S_NAME_LENGTH,
+    MAX_PORT,
+    MIDDLEWARE_TEMPLATE,
+    MIN_PORT,
+    SERVICE_TEMPLATE,
+)
 from automation.exceptions import KubernetesError, ValidationError
 from automation.logger import get_logger
 from automation.template_renderer import render_template
@@ -51,9 +61,9 @@ class KubernetesClient:
         if not name:
             raise ValidationError(f"{resource_type.capitalize()} name cannot be empty")
 
-        if len(name) > 63:
+        if len(name) > MAX_K8S_NAME_LENGTH:
             raise ValidationError(
-                f"{resource_type.capitalize()} name too long (max 63 chars, got {len(name)})"
+                f"{resource_type.capitalize()} name too long (max {MAX_K8S_NAME_LENGTH} chars, got {len(name)})"
             )
 
         # Lowercase alphanumeric + hyphens, start/end with alphanumeric
@@ -119,9 +129,9 @@ class KubernetesClient:
                     "with dots, underscores, double underscores, or hyphens as separators"
                 )
 
-        if len(image) > 255:
+        if len(image) > MAX_IMAGE_LENGTH:
             raise ValidationError(
-                f"Image reference too long ({len(image)} chars, recommended max 255)"
+                f"Image reference too long ({len(image)} chars, recommended max {MAX_IMAGE_LENGTH})"
             )
 
         logger.debug(f"Validated image: {image}")
@@ -139,8 +149,8 @@ class KubernetesClient:
         if not isinstance(port, int):
             raise ValidationError(f"Port must be an integer, got {type(port).__name__}")
 
-        if not (1 <= port <= 65535):
-            raise ValidationError(f"Port must be between 1-65535, got {port}")
+        if not (MIN_PORT <= port <= MAX_PORT):
+            raise ValidationError(f"Port must be between {MIN_PORT}-{MAX_PORT}, got {port}")
 
         logger.debug(f"Validated port: {port}")
 
@@ -339,7 +349,6 @@ class KubernetesClient:
                 )
                 self._update_standard_resource(manifest, namespace, kind, resource_name)
             else:
-                # Real failure - raise exception
                 error_msg = f"Failed to apply {kind} {resource_name}"
                 if isinstance(e, ApiException):
                     error_msg += f": {e.reason}"
@@ -556,7 +565,7 @@ class KubernetesClient:
             "env_vars": env_vars,
         }
 
-        yaml_content = render_template("deployment.yaml.j2", data, template_dir)
+        yaml_content = render_template(DEPLOYMENT_TEMPLATE, data, template_dir)
         self._apply_yaml(yaml_content, namespace)
 
     def create_service(
@@ -596,7 +605,7 @@ class KubernetesClient:
 
         data = {"name": name, "namespace": namespace, "port": port, "target_port": target_port}
 
-        yaml_content = render_template("service.yaml.j2", data, template_dir)
+        yaml_content = render_template(SERVICE_TEMPLATE, data, template_dir)
         self._apply_yaml(yaml_content, namespace)
 
     def create_middleware(
@@ -626,7 +635,7 @@ class KubernetesClient:
 
         data = {"name": name, "namespace": namespace, "prefixes": prefixes}
 
-        yaml_content = render_template("middleware.yaml.j2", data, template_dir)
+        yaml_content = render_template(MIDDLEWARE_TEMPLATE, data, template_dir)
         self._apply_yaml(yaml_content, namespace)
 
     def create_ingress(
@@ -679,5 +688,5 @@ class KubernetesClient:
             "middleware_name": middleware_name,
         }
 
-        yaml_content = render_template("ingress.yaml.j2", data, template_dir)
+        yaml_content = render_template(INGRESS_TEMPLATE, data, template_dir)
         self._apply_yaml(yaml_content, namespace)

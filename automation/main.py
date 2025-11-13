@@ -100,7 +100,7 @@ def main() -> None:
     try:
         k8s = KubernetesClient()
     except Exception:
-        logger.critical("Kubernetes client initialization failed")
+        logger.critical("Kubernetes client initialization failed", extra={"action": args.action})
         sys.exit(1)
 
     # Initialize GitHub client (optional)
@@ -108,16 +108,22 @@ def main() -> None:
     github_repo = os.getenv(GITHUB_REPO)
 
     if args.skip_github:
-        logger.info("GitHub integration disabled, skipped via --skip-github flag")
+        logger.info(
+            "GitHub integration disabled, skipped via --skip-github flag",
+            extra={"skip_github": True},
+        )
         github = None
     elif github_token and github_repo:
         try:
             github = GithubClient(token=github_token, repo_name=github_repo)
         except Exception as e:
-            logger.warning(f"GitHub integration disabled: {e}")
+            logger.warning(f"GitHub integration disabled: {e}", extra={"error": str(e)})
             github = None
     else:
-        logger.info(f"GitHub integration disabled, missing {GITHUB_TOKEN} or {GITHUB_REPO}")
+        logger.info(
+            f"GitHub integration disabled, missing {GITHUB_TOKEN} or {GITHUB_REPO}",
+            extra={"has_token": bool(github_token), "has_repo": bool(github_repo)},
+        )
         github = None
 
     if args.action == "create":
@@ -129,7 +135,10 @@ def main() -> None:
         logger.error(f"Operation {args.action} failed", extra={"namespace": namespace})
         sys.exit(1)
 
-    logger.info(f"Operation {args.action} completed successfully")
+    logger.info(
+        f"Operation {args.action} completed successfully",
+        extra={"action": args.action, "namespace": namespace},
+    )
 
 
 def create_environment(
@@ -216,15 +225,29 @@ def create_environment(
         ec2_ip = os.getenv(EC2_PUBLIC_IP, "<EC2-IP>")
 
         if ingress_created:
-            logger.info(f"Preview environment accessible at: http://{ec2_ip}/{namespace}/")
+            logger.info(
+                f"Preview environment accessible at: http://{ec2_ip}/{namespace}/",
+                extra={"namespace": namespace, "url": f"http://{ec2_ip}/{namespace}/"},
+            )
         else:
-            logger.info("No ingress configured - environment only accessible via port-forward")
+            logger.info(
+                "No ingress configured - environment only accessible via port-forward",
+                extra={"namespace": namespace, "ingress_created": False},
+            )
 
-        logger.info("Access services directly with kubectl port-forward:")
+        logger.info(
+            "Access services directly with kubectl port-forward:", extra={"namespace": namespace}
+        )
         for service in config["services"]:
             local_port = service["port"] + PORT_FORWARD_OFFSET
             logger.info(
-                f"  kubectl port-forward -n {namespace} svc/{service['name']} {local_port}:{service['port']}"
+                f"  kubectl port-forward -n {namespace} svc/{service['name']} {local_port}:{service['port']}",
+                extra={
+                    "namespace": namespace,
+                    "service": service["name"],
+                    "local_port": local_port,
+                    "service_port": service["port"],
+                },
             )
 
         # Post/update GitHub comment if integration is enabled
@@ -254,24 +277,27 @@ def create_environment(
 
             except GitHubError as e:
                 # GitHub integration is optional
-                logger.warning(f"Failed to post GitHub comment: {e}")
+                logger.warning(
+                    f"Failed to post GitHub comment: {e}",
+                    extra={"pr_number": pr_number, "error": str(e)},
+                )
 
         return True
 
     except ConfigError as e:
-        logger.error(str(e))
+        logger.error(str(e), extra={"namespace": namespace, "error_type": "ConfigError"})
         return False
     except ValidationError as e:
-        logger.error(str(e))
+        logger.error(str(e), extra={"namespace": namespace, "error_type": "ValidationError"})
         return False
     except TemplateError as e:
-        logger.error(str(e))
+        logger.error(str(e), extra={"namespace": namespace, "error_type": "TemplateError"})
         return False
     except KubernetesError as e:
-        logger.error(str(e))
+        logger.error(str(e), extra={"namespace": namespace, "error_type": "KubernetesError"})
         return False
     except Exception as e:
-        logger.error(str(e))
+        logger.error(str(e), extra={"namespace": namespace, "error_type": type(e).__name__})
         return False
 
 
@@ -301,13 +327,13 @@ def delete_environment(k8s: KubernetesClient, namespace: str) -> bool:
         return True
 
     except ValidationError as e:
-        logger.error(str(e))
+        logger.error(str(e), extra={"namespace": namespace, "error_type": "ValidationError"})
         return False
     except KubernetesError as e:
-        logger.error(str(e))
+        logger.error(str(e), extra={"namespace": namespace, "error_type": "KubernetesError"})
         return False
     except Exception as e:
-        logger.error(str(e))
+        logger.error(str(e), extra={"namespace": namespace, "error_type": type(e).__name__})
         return False
 
 

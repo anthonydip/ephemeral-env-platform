@@ -74,7 +74,10 @@ class KubernetesClient:
                 "and hyphens only. Must start and end with alphanumeric character."
             )
 
-        logger.debug(f"Validated {resource_type} name: {name}")
+        logger.debug(
+            f"Validated {resource_type} name: {name}",
+            extra={"resource_type": resource_type, "name": name, "length": len(name)},
+        )
 
     def _validate_image_name(self, image: str) -> None:
         """
@@ -134,7 +137,7 @@ class KubernetesClient:
                 f"Image reference too long ({len(image)} chars, recommended max {MAX_IMAGE_LENGTH})"
             )
 
-        logger.debug(f"Validated image: {image}")
+        logger.debug(f"Validated image: {image}", extra={"image": image, "length": len(image)})
 
     def _validate_port(self, port: int) -> None:
         """
@@ -152,7 +155,7 @@ class KubernetesClient:
         if not (MIN_PORT <= port <= MAX_PORT):
             raise ValidationError(f"Port must be between {MIN_PORT}-{MAX_PORT}, got {port}")
 
-        logger.debug(f"Validated port: {port}")
+        logger.debug(f"Validated port: {port}", extra={"port": port})
 
     def _parse_yaml_manifest(self, yaml_content: str, namespace: str) -> dict:
         """
@@ -490,8 +493,14 @@ class KubernetesClient:
         try:
             namespaces = self.v1.list_namespace()
             namespace_names = [ns.metadata.name for ns in namespaces.items]
-            logger.info(f"Listed {len(namespace_names)} namespaces")
-            logger.debug(f"Namespaces: {', '.join(namespace_names)}")
+            logger.info(
+                f"Listed {len(namespace_names)} namespaces",
+                extra={"count": len(namespace_names)},
+            )
+            logger.debug(
+                f"Namespaces: {', '.join(namespace_names)}",
+                extra={"namespaces": namespace_names},
+            )
             return namespace_names
         except ApiException as e:
             raise KubernetesError(f"Failed to list namespaces: {e.reason}") from e
@@ -514,11 +523,13 @@ class KubernetesClient:
 
         try:
             self.v1.read_namespace(name)
-            logger.debug(f"Namespace {name} exists")
+            logger.debug(f"Namespace {name} exists", extra={"namespace": name, "exists": True})
             return True
         except ApiException as e:
             if e.status == 404:
-                logger.debug(f"Namespace {name} does not exist")
+                logger.debug(
+                    f"Namespace {name} does not exist", extra={"namespace": name, "exists": False}
+                )
                 return False
             raise KubernetesError(f"Failed to check namespace existence: {e.reason}") from e
 

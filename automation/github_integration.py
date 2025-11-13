@@ -32,9 +32,12 @@ class GithubClient:
             auth = Auth.Token(token)
             self.client = Github(auth=auth)
             self.repo = self.client.get_repo(repo_name)
-            logger.info(f"GitHub client initialized for {repo_name} successfully")
+            logger.info(
+                f"GitHub client initialized for {repo_name} successfully",
+                extra={"repo": repo_name},
+            )
         except Exception as e:
-            logger.critical(f"Failed to initialize GitHub client: {e}")
+            logger.critical(f"Failed to initialize GitHub client: {e}", extra={"error": str(e)})
             raise
 
     def post_comment(self, pr_number: int, message: str) -> None:
@@ -86,7 +89,9 @@ class GithubClient:
                     )
                     return comment.id
 
-            logger.info(f"No existing bot comment found on PR #{pr_number}")
+            logger.info(
+                f"No existing bot comment found on PR #{pr_number}", extra={"pr_number": pr_number}
+            )
             return None
         except GithubException as e:
             raise GitHubError(f"Failed to search for bot comment on PR #{pr_number}: {e}") from e

@@ -7,6 +7,7 @@ resources with dynamic data from configuration files.
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from jinja2 import (
@@ -42,6 +43,8 @@ def render_template(
     Raises:
         TemplateError: If template not found, syntax error, or rendering fails
     """
+    start_time = time.perf_counter()
+
     logger.debug(
         f"Rendering template: {template_name}",
         extra={"template": template_name, "template_dir": template_dir},
@@ -52,9 +55,15 @@ def render_template(
         template = environment.get_template(template_name)
         rendered = template.render(data)
 
+        duration = time.perf_counter() - start_time
+
         logger.info(
             "Successfully rendered template",
-            extra={"template": template_name, "size": len(rendered)},
+            extra={
+                "template": template_name,
+                "size_bytes": len(rendered),
+                "duration_seconds": round(duration, 3),
+            },
         )
         return rendered
 

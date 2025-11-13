@@ -77,7 +77,7 @@ class KubernetesClient:
 
         logger.debug(
             f"Validated {resource_type} name: {name}",
-            extra={"resource_type": resource_type, "name": name, "length": len(name)},
+            extra={"resource_type": resource_type, "resource_name": name, "length": len(name)},
         )
 
     def _validate_image_name(self, image: str) -> None:

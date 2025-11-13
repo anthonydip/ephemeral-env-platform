@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 
 from dotenv import load_dotenv
 
@@ -126,18 +127,29 @@ def main() -> None:
         )
         github = None
 
+    operation_start = time.perf_counter()
+
     if args.action == "create":
         success = create_environment(k8s, namespace, args.config, args.templates, github)
     elif args.action == "delete":
         success = delete_environment(k8s, namespace)
 
+    duration = time.perf_counter() - operation_start
+
     if not success:
-        logger.error(f"Operation {args.action} failed", extra={"namespace": namespace})
+        logger.error(
+            f"Operation {args.action} failed",
+            extra={"namespace": namespace, "duration_seconds": round(duration, 3)},
+        )
         sys.exit(1)
 
     logger.info(
         f"Operation {args.action} completed successfully",
-        extra={"action": args.action, "namespace": namespace},
+        extra={
+            "action": args.action,
+            "namespace": namespace,
+            "duration_seconds": round(duration, 3),
+        },
     )
 
 
@@ -163,6 +175,8 @@ def create_environment(
     """
     logger = get_logger(__name__)
 
+    start_time = time.perf_counter()
+
     logger.info(f"Creating environment: {namespace}", extra={"namespace": namespace})
 
     try:
@@ -172,8 +186,13 @@ def create_environment(
         # Create namespace
         k8s.create_namespace(namespace)
 
+        # Track deployment times
+        deployment_times = []
+
         # Create services and deployments
         for service in config["services"]:
+            service_start = time.perf_counter()
+
             k8s.create_deployment(
                 name=service["name"],
                 namespace=namespace,
@@ -189,6 +208,18 @@ def create_environment(
                 port=service["port"],
                 target_port=service["port"],
                 template_dir=template_dir,
+            )
+
+            service_duration = time.perf_counter() - service_start
+            deployment_times.append(service_duration)
+
+            logger.debug(
+                f"Deployed service: {service['name']}",
+                extra={
+                    "service": service["name"],
+                    "namespace": namespace,
+                    "duration_seconds": round(service_duration, 3),
+                },
             )
 
         # Create middleware for path stripping
@@ -281,6 +312,22 @@ def create_environment(
                     f"Failed to post GitHub comment: {e}",
                     extra={"pr_number": pr_number, "error": str(e)},
                 )
+
+        total_duration = time.perf_counter() - start_time
+
+        logger.info(
+            "Environment created successfully",
+            extra={
+                "namespace": namespace,
+                "service_count": len(config["services"]),
+                "total_duration_seconds": round(total_duration, 3),
+                "avg_service_duration_seconds": (
+                    round(sum(deployment_times) / len(deployment_times), 3)
+                    if deployment_times
+                    else 0
+                ),
+            },
+        )
 
         return True
 

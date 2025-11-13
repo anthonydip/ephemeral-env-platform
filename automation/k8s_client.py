@@ -5,6 +5,7 @@ Kubernetes client wrapper for namespace management.
 from __future__ import annotations
 
 import re
+import time
 
 from kubernetes import client, config, utils
 from kubernetes.client.rest import ApiException
@@ -558,6 +559,8 @@ class KubernetesClient:
             TemplateError: If template rendering fails
             KubernetesError: If deployment creation fails
         """
+        start_time = time.perf_counter()
+
         logger.info(
             f"Creating deployment: {name}",
             extra={"deployment": name, "namespace": namespace, "image": image, "port": port},
@@ -578,6 +581,17 @@ class KubernetesClient:
 
         yaml_content = render_template(DEPLOYMENT_TEMPLATE, data, template_dir)
         self._apply_yaml(yaml_content, namespace)
+
+        duration = time.perf_counter() - start_time
+
+        logger.debug(
+            f"Deployment created: {name}",
+            extra={
+                "deployment": name,
+                "namespace": namespace,
+                "duration_seconds": round(duration, 3),
+            },
+        )
 
     def create_service(
         self, name: str, namespace: str, port: int, target_port: int, template_dir: str

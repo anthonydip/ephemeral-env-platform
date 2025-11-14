@@ -114,6 +114,27 @@ RESERVED_ATTRS = {
     "taskName",
 }
 
+# Date format for JSON formatter
+JSON_DATEFMT = "%Y-%m-%dT%H:%M:%S"
+
+# Console output format for structured formatter
+STRUCT_CONSOLE_FMT = "[%(operation_id)s] | %(levelname)-8s | %(message)s"
+
+# File output format for structured formatter
+STRUCT_FILE_FMT = "%(asctime)s | [%(operation_id)s] | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d | %(message)s"
+
+# Date format for structured formatter
+STRUCT_DATEFMT = "%Y-%m-%d %H:%M:%S"
+
+# Console output format for text formatter
+TEXT_CONSOLE_FMT = "[%(operation_id)s] | %(levelname)-8s | %(message)s"
+
+# File output format for text formatter
+TEXT_FILE_FMT = "%(asctime)s | [%(operation_id)s] | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d | %(message)s"
+
+# Date format for text formatter
+TEXT_DATEFMT = "%Y-%m-%d %H:%M:%S"
+
 # ============================================================================
 # Environment Variable Names
 # ============================================================================

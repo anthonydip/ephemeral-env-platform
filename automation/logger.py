@@ -12,7 +12,16 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from automation.constants import RESERVED_ATTRS
+from automation.constants import (
+    JSON_DATEFMT,
+    RESERVED_ATTRS,
+    STRUCT_CONSOLE_FMT,
+    STRUCT_DATEFMT,
+    STRUCT_FILE_FMT,
+    TEXT_CONSOLE_FMT,
+    TEXT_DATEFMT,
+    TEXT_FILE_FMT,
+)
 from automation.context import get_operation_id
 
 
@@ -121,6 +130,7 @@ class JSONFormatter(BaseFormatter):
 def setup_logging(
     level: str = "INFO",
     log_file: str | None = None,
+    log_format: str = "text",
 ) -> None:
     """
     Configure application-wide logging.
@@ -131,6 +141,7 @@ def setup_logging(
     Args:
         level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         log_file: Optional file path for log output
+        log_format: Format type (text, structured, or json)
     """
     log_level = getattr(logging, level.upper())
 
@@ -140,13 +151,16 @@ def setup_logging(
     # Remove existing handlers
     root_logger.handlers.clear()
 
-    # Create formatters
-    detailed_formatter = logging.Formatter(
-        fmt="%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
-    console_formatter = logging.Formatter(fmt="%(levelname)-8s | %(message)s")
+    # Choose formatter based on format type
+    if log_format == "json":
+        console_formatter = JSONFormatter(datefmt=JSON_DATEFMT)
+        file_formatter = JSONFormatter(datefmt=JSON_DATEFMT)
+    elif log_format == "structured":
+        console_formatter = StructuredFormatter(fmt=STRUCT_CONSOLE_FMT, datefmt=STRUCT_DATEFMT)
+        file_formatter = StructuredFormatter(fmt=STRUCT_FILE_FMT, datefmt=STRUCT_DATEFMT)
+    else:
+        console_formatter = TextFormatter(fmt=TEXT_CONSOLE_FMT)
+        file_formatter = TextFormatter(fmt=TEXT_FILE_FMT, datefmt=TEXT_DATEFMT)
 
     # Set up console handler
     console_handler = logging.StreamHandler(sys.stdout)
@@ -161,7 +175,7 @@ def setup_logging(
 
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.DEBUG)  # Always DEBUG for files
-        file_handler.setFormatter(detailed_formatter)
+        file_handler.setFormatter(file_formatter)
         root_logger.addHandler(file_handler)
 
     logging.getLogger("kubernetes").setLevel(logging.WARNING)

@@ -6,6 +6,7 @@ Provides structured logging with console and file outputs.
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from pathlib import Path
@@ -55,6 +56,66 @@ class BaseFormatter(logging.Formatter):
             if key not in RESERVED_ATTRS and not key.startswith("_"):
                 extra_fields[key] = value
         return extra_fields
+
+
+class TextFormatter(BaseFormatter):
+    """
+    Simple text formatter.
+    Does not show extra fields.
+    """
+
+    pass
+
+
+class StructuredFormatter(BaseFormatter):
+    """
+    Human-readable formatter that appends extra fields as key=value pairs.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Format with extra fields appended as key=value pairs."""
+        base_message = super().format(record)
+
+        # Append extra fields (excluding operation_id)
+        extra_fields = {
+            key: value for key, value in record.extra_fields.items() if key != "operation_id"
+        }
+
+        if extra_fields:
+            extra_str = " | " + " ".join(f"{key}={value}" for key, value in extra_fields.items())
+            return base_message + extra_str
+
+        return base_message
+
+
+class JSONFormatter(BaseFormatter):
+    """
+    JSON formatter for structured logging.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Format as JSON with all fields."""
+        # Inject operation_id and extract extra fields
+        super().format(record)
+
+        log_data = {
+            "timestamp": self.formatTime(record, self.datefmt),
+            "operation_id": record.operation_id,
+            "level": record.levelname,
+            "logger": record.name,
+            "function": record.funcName,
+            "line": record.lineno,
+            "message": record.getMessage(),
+        }
+
+        # Add all extra fields
+        log_data.update(record.extra_fields)
+
+        # Add exception info if present
+        if record.exc_info:
+            log_data["exception"] = self.formatException(record.exc_info)
+
+        return json.dumps(log_data)
 
 
 def setup_logging(

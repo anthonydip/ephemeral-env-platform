@@ -20,6 +20,7 @@ from automation.constants import (
     DEFAULT_TEMPLATE_DIR,
     EC2_PUBLIC_IP,
     GITHUB_REPO,
+    GITHUB_RUN_ID,
     GITHUB_TOKEN,
     LOG_FILE,
     LOG_LEVEL,
@@ -28,6 +29,7 @@ from automation.constants import (
     PREVIEW_READY_MARKER,
     STRIPPREFIX_MIDDLEWARE,
 )
+from automation.context import set_operation_id
 from automation.exceptions import (
     ConfigError,
     GitHubError,
@@ -87,6 +89,10 @@ def main() -> None:
 
     # Configure logging once at startup
     setup_logging(level=args.log_level, log_file=log_file)
+
+    # Use GitHub Actions run ID if provided
+    github_run_id = os.getenv(GITHUB_RUN_ID)
+    set_operation_id(github_run_id) if github_run_id else set_operation_id()
 
     logger = get_logger(__name__)
 

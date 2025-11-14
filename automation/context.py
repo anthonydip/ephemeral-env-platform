@@ -1,5 +1,8 @@
 """
 Request context for distributed tracing.
+
+Used to store a unique operation ID for the current context
+allowing for injection into loggers to track operations.
 """
 
 from __future__ import annotations

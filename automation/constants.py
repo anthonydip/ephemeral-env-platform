@@ -94,6 +94,9 @@ GITHUB_TOKEN = "GITHUB_TOKEN"
 # GitHub repository (format owner/repo)
 GITHUB_REPO = "GITHUB_REPO"
 
+# GitHub Actions run ID
+GITHUB_RUN_ID = "GITHUB_RUN_ID"
+
 # Logging level
 LOG_LEVEL = "LOG_LEVEL"
 

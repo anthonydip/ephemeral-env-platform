@@ -17,6 +17,8 @@ from automation.config_parser import load_config
 from automation.constants import (
     DEFAULT_CONFIG_PATH,
     DEFAULT_LOG_FILE,
+    DEFAULT_LOG_FORMAT,
+    DEFAULT_LOG_LEVEL,
     DEFAULT_TEMPLATE_DIR,
     EC2_PUBLIC_IP,
     GITHUB_REPO,
@@ -67,13 +69,19 @@ def main() -> None:
     parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default=os.getenv(LOG_LEVEL, "INFO"),
-        help="Set logging level (default: INFO)",
+        default=os.getenv(LOG_LEVEL, DEFAULT_LOG_LEVEL),
+        help=f"Set logging level (default: {DEFAULT_LOG_LEVEL})",
     )
     parser.add_argument(
         "--skip-github",
         action="store_true",
         help="Skip GitHub integration (don't post PR comments)",
+    )
+    parser.add_argument(
+        "--log-format",
+        choices=["text", "structured", "json"],
+        default=DEFAULT_LOG_FORMAT,
+        help=f"Log output format (default: {DEFAULT_LOG_FORMAT})",
     )
 
     args = parser.parse_args()
@@ -88,7 +96,7 @@ def main() -> None:
         log_file = log_file_env
 
     # Configure logging once at startup
-    setup_logging(level=args.log_level, log_file=log_file)
+    setup_logging(level=args.log_level, log_file=log_file, log_format=args.log_format)
 
     # Use GitHub Actions run ID if provided
     github_run_id = os.getenv(GITHUB_RUN_ID)

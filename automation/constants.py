@@ -65,7 +65,7 @@ STRIPPREFIX_MIDDLEWARE = "stripprefix"
 PREVIEW_READY_MARKER = "🚀 **Preview Environment Ready!**"
 
 # ============================================================================
-# Default Paths
+# Default Paths and Variables
 # ============================================================================
 
 # Default path for ephemeral environment configuration file
@@ -76,6 +76,12 @@ DEFAULT_TEMPLATE_DIR = "automation/templates/"
 
 # Default log file path
 DEFAULT_LOG_FILE = "logs/ephemeral-env.log"
+
+# Default log level
+DEFAULT_LOG_LEVEL = "INFO"
+
+# Default log output format
+DEFAULT_LOG_FORMAT = "text"
 
 # ============================================================================
 # Port Configuration
@@ -113,6 +119,9 @@ RESERVED_ATTRS = {
     "exc_text",
     "taskName",
 }
+
+# Fields to exclude from extra_fields extraction
+EXCLUDED_EXTRA_FIELDS = {"operation_id", "extra_fields"}
 
 # Date format for JSON formatter
 JSON_DATEFMT = "%Y-%m-%dT%H:%M:%S"

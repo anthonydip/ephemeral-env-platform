@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from automation.constants import (
+    EXCLUDED_EXTRA_FIELDS,
     JSON_DATEFMT,
     RESERVED_ATTRS,
     STRUCT_CONSOLE_FMT,
@@ -62,7 +63,11 @@ class BaseFormatter(logging.Formatter):
         """
         extra_fields = {}
         for key, value in record.__dict__.items():
-            if key not in RESERVED_ATTRS and not key.startswith("_"):
+            if (
+                key not in RESERVED_ATTRS
+                and not key.startswith("_")
+                and key not in EXCLUDED_EXTRA_FIELDS
+            ):
                 extra_fields[key] = value
         return extra_fields
 
@@ -85,13 +90,10 @@ class StructuredFormatter(BaseFormatter):
         """Format with extra fields appended as key=value pairs."""
         base_message = super().format(record)
 
-        # Append extra fields (excluding operation_id)
-        extra_fields = {
-            key: value for key, value in record.extra_fields.items() if key != "operation_id"
-        }
-
-        if extra_fields:
-            extra_str = " | " + " ".join(f"{key}={value}" for key, value in extra_fields.items())
+        if record.extra_fields:
+            extra_str = " | " + " ".join(
+                f"{key}={value}" for key, value in record.extra_fields.items()
+            )
             return base_message + extra_str
 
         return base_message
@@ -117,7 +119,6 @@ class JSONFormatter(BaseFormatter):
             "message": record.getMessage(),
         }
 
-        # Add all extra fields
         log_data.update(record.extra_fields)
 
         # Add exception info if present

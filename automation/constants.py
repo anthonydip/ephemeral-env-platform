@@ -85,6 +85,36 @@ DEFAULT_LOG_FILE = "logs/ephemeral-env.log"
 PORT_FORWARD_OFFSET = 1000
 
 # ============================================================================
+# Logger Configuration
+# ============================================================================
+
+# Reserved LogRecord attributes for extra fields
+RESERVED_ATTRS = {
+    "name",
+    "msg",
+    "args",
+    "created",
+    "filename",
+    "funcName",
+    "levelname",
+    "levelno",
+    "lineno",
+    "module",
+    "msecs",
+    "message",
+    "pathname",
+    "process",
+    "processName",
+    "relativeCreated",
+    "stack_info",
+    "thread",
+    "threadName",
+    "exc_info",
+    "exc_text",
+    "taskName",
+}
+
+# ============================================================================
 # Environment Variable Names
 # ============================================================================
 

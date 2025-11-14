@@ -201,7 +201,8 @@ def create_environment(
         k8s.create_namespace(namespace)
 
         # Track deployment times
-        deployment_times = []
+        service_deployment_times = []
+        ingress_deployment_times = []
 
         # Create services and deployments
         for service in config["services"]:
@@ -225,7 +226,7 @@ def create_environment(
             )
 
             service_duration = time.perf_counter() - service_start
-            deployment_times.append(service_duration)
+            service_deployment_times.append(service_duration)
 
             logger.debug(
                 f"Deployed service: {service['name']}",
@@ -248,6 +249,8 @@ def create_environment(
         ingress_created = False
         for service in config["services"]:
             if service.get("ingress", {}).get("enabled", False):
+                ingress_start = time.perf_counter()
+
                 service_path = service["ingress"].get("path", "/")
                 full_path = f"/{namespace}{service_path}"
 
@@ -262,9 +265,18 @@ def create_environment(
                 )
 
                 ingress_created = True
+
+                ingress_duration = time.perf_counter() - ingress_start
+                ingress_deployment_times.append(ingress_duration)
+
                 logger.info(
                     f"Created ingress for {service['name']} at {full_path}",
-                    extra={"namespace": namespace, "service": service["name"], "path": full_path},
+                    extra={
+                        "namespace": namespace,
+                        "service": service["name"],
+                        "path": full_path,
+                        "duration_seconds": round(ingress_duration, 3),
+                    },
                 )
 
         ec2_ip = os.getenv(EC2_PUBLIC_IP, "<EC2-IP>")
@@ -334,10 +346,16 @@ def create_environment(
             extra={
                 "namespace": namespace,
                 "service_count": len(config["services"]),
+                "ingresses_created": len(ingress_deployment_times),
                 "total_duration_seconds": round(total_duration, 3),
                 "avg_service_duration_seconds": (
-                    round(sum(deployment_times) / len(deployment_times), 3)
-                    if deployment_times
+                    round(sum(service_deployment_times) / len(service_deployment_times), 3)
+                    if service_deployment_times
+                    else 0
+                ),
+                "avg_ingress_duration_seconds": (
+                    round(sum(ingress_deployment_times) / len(ingress_deployment_times), 3)
+                    if ingress_deployment_times
                     else 0
                 ),
             },

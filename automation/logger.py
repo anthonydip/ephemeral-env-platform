@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import logging.handlers
 import sys
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,8 @@ from typing import Any
 from automation.constants import (
     EXCLUDED_EXTRA_FIELDS,
     JSON_DATEFMT,
+    LOG_BACKUP_COUNT,
+    LOG_MAX_BYTES,
     RESERVED_ATTRS,
     STRUCT_CONSOLE_FMT,
     STRUCT_DATEFMT,
@@ -174,7 +177,12 @@ def setup_logging(
         log_path = Path(log_file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        file_handler = logging.FileHandler(log_file)
+        file_handler = logging.handlers.RotatingFileHandler(
+            filename=log_file,
+            maxBytes=LOG_MAX_BYTES,
+            backupCount=LOG_BACKUP_COUNT,
+            encoding="utf-8",
+        )
         file_handler.setLevel(logging.DEBUG)  # Always DEBUG for files
         file_handler.setFormatter(file_formatter)
         root_logger.addHandler(file_handler)

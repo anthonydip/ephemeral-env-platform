@@ -144,6 +144,12 @@ TEXT_FILE_FMT = "%(asctime)s | [%(operation_id)s] | %(levelname)-8s | %(name)s:%
 # Date format for text formatter
 TEXT_DATEFMT = "%Y-%m-%d %H:%M:%S"
 
+# Maximum size of a log file before rotation
+LOG_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+
+# Number of rotated log files to keep
+LOG_BACKUP_COUNT = 5
+
 # ============================================================================
 # Environment Variable Names
 # ============================================================================

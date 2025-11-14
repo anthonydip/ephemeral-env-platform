@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 
 from dotenv import load_dotenv
 
@@ -16,9 +17,12 @@ from automation.config_parser import load_config
 from automation.constants import (
     DEFAULT_CONFIG_PATH,
     DEFAULT_LOG_FILE,
+    DEFAULT_LOG_FORMAT,
+    DEFAULT_LOG_LEVEL,
     DEFAULT_TEMPLATE_DIR,
     EC2_PUBLIC_IP,
     GITHUB_REPO,
+    GITHUB_RUN_ID,
     GITHUB_TOKEN,
     LOG_FILE,
     LOG_LEVEL,
@@ -27,6 +31,7 @@ from automation.constants import (
     PREVIEW_READY_MARKER,
     STRIPPREFIX_MIDDLEWARE,
 )
+from automation.context import set_operation_id
 from automation.exceptions import (
     ConfigError,
     GitHubError,
@@ -64,8 +69,19 @@ def main() -> None:
     parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        default=os.getenv(LOG_LEVEL, "INFO"),
-        help="Set logging level (default: INFO)",
+        default=os.getenv(LOG_LEVEL, DEFAULT_LOG_LEVEL),
+        help=f"Set logging level (default: {DEFAULT_LOG_LEVEL})",
+    )
+    parser.add_argument(
+        "--skip-github",
+        action="store_true",
+        help="Skip GitHub integration (don't post PR comments)",
+    )
+    parser.add_argument(
+        "--log-format",
+        choices=["text", "structured", "json"],
+        default=DEFAULT_LOG_FORMAT,
+        help=f"Log output format (default: {DEFAULT_LOG_FORMAT})",
     )
 
     args = parser.parse_args()
@@ -80,7 +96,11 @@ def main() -> None:
         log_file = log_file_env
 
     # Configure logging once at startup
-    setup_logging(level=args.log_level, log_file=log_file)
+    setup_logging(level=args.log_level, log_file=log_file, log_format=args.log_format)
+
+    # Use GitHub Actions run ID if provided
+    github_run_id = os.getenv(GITHUB_RUN_ID)
+    set_operation_id(github_run_id) if github_run_id else set_operation_id()
 
     logger = get_logger(__name__)
 
@@ -95,33 +115,56 @@ def main() -> None:
     try:
         k8s = KubernetesClient()
     except Exception:
-        logger.critical("Kubernetes client initialization failed")
+        logger.critical("Kubernetes client initialization failed", extra={"action": args.action})
         sys.exit(1)
 
     # Initialize GitHub client (optional)
     github_token = os.getenv(GITHUB_TOKEN)
     github_repo = os.getenv(GITHUB_REPO)
 
-    if github_token and github_repo:
+    if args.skip_github:
+        logger.info(
+            "GitHub integration disabled, skipped via --skip-github flag",
+            extra={"skip_github": True},
+        )
+        github = None
+    elif github_token and github_repo:
         try:
             github = GithubClient(token=github_token, repo_name=github_repo)
         except Exception as e:
-            logger.warning(f"GitHub integration disabled: {e}")
+            logger.warning(f"GitHub integration disabled: {e}", extra={"error": str(e)})
             github = None
     else:
-        logger.info(f"GitHub integration disabled - missing {GITHUB_TOKEN} or {GITHUB_REPO}")
+        logger.info(
+            f"GitHub integration disabled, missing {GITHUB_TOKEN} or {GITHUB_REPO}",
+            extra={"has_token": bool(github_token), "has_repo": bool(github_repo)},
+        )
         github = None
+
+    operation_start = time.perf_counter()
 
     if args.action == "create":
         success = create_environment(k8s, namespace, args.config, args.templates, github)
     elif args.action == "delete":
         success = delete_environment(k8s, namespace)
 
+    duration = time.perf_counter() - operation_start
+
     if not success:
-        logger.error(f"Operation {args.action} failed", extra={"namespace": namespace})
+        logger.error(
+            f"Operation {args.action} failed",
+            extra={"namespace": namespace, "duration_seconds": round(duration, 3)},
+        )
         sys.exit(1)
 
-    logger.info(f"Operation {args.action} completed successfully")
+    logger.info(
+        f"Operation {args.action} completed successfully",
+        extra={
+            "action": args.action,
+            "namespace": namespace,
+            "duration_seconds": round(duration, 3),
+        },
+    )
 
 
 def create_environment(
@@ -146,6 +189,8 @@ def create_environment(
     """
     logger = get_logger(__name__)
 
+    start_time = time.perf_counter()
+
     logger.info(f"Creating environment: {namespace}", extra={"namespace": namespace})
 
     try:
@@ -155,8 +200,14 @@ def create_environment(
         # Create namespace
         k8s.create_namespace(namespace)
 
+        # Track deployment times
+        service_deployment_times = []
+        ingress_deployment_times = []
+
         # Create services and deployments
         for service in config["services"]:
+            service_start = time.perf_counter()
+
             k8s.create_deployment(
                 name=service["name"],
                 namespace=namespace,
@@ -174,6 +225,18 @@ def create_environment(
                 template_dir=template_dir,
             )
 
+            service_duration = time.perf_counter() - service_start
+            service_deployment_times.append(service_duration)
+
+            logger.debug(
+                f"Deployed service: {service['name']}",
+                extra={
+                    "service": service["name"],
+                    "namespace": namespace,
+                    "duration_seconds": round(service_duration, 3),
+                },
+            )
+
         # Create middleware for path stripping
         k8s.create_middleware(
             name=STRIPPREFIX_MIDDLEWARE,
@@ -186,6 +249,8 @@ def create_environment(
         ingress_created = False
         for service in config["services"]:
             if service.get("ingress", {}).get("enabled", False):
+                ingress_start = time.perf_counter()
+
                 service_path = service["ingress"].get("path", "/")
                 full_path = f"/{namespace}{service_path}"
 
@@ -200,23 +265,46 @@ def create_environment(
                 )
 
                 ingress_created = True
+
+                ingress_duration = time.perf_counter() - ingress_start
+                ingress_deployment_times.append(ingress_duration)
+
                 logger.info(
                     f"Created ingress for {service['name']} at {full_path}",
-                    extra={"namespace": namespace, "service": service["name"], "path": full_path},
+                    extra={
+                        "namespace": namespace,
+                        "service": service["name"],
+                        "path": full_path,
+                        "duration_seconds": round(ingress_duration, 3),
+                    },
                 )
 
         ec2_ip = os.getenv(EC2_PUBLIC_IP, "<EC2-IP>")
 
         if ingress_created:
-            logger.info(f"Preview environment accessible at: http://{ec2_ip}/{namespace}/")
+            logger.info(
+                f"Preview environment accessible at: http://{ec2_ip}/{namespace}/",
+                extra={"namespace": namespace, "url": f"http://{ec2_ip}/{namespace}/"},
+            )
         else:
-            logger.info("No ingress configured - environment only accessible via port-forward")
+            logger.info(
+                "No ingress configured - environment only accessible via port-forward",
+                extra={"namespace": namespace, "ingress_created": False},
+            )
 
-        logger.info("Access services directly with kubectl port-forward:")
+        logger.info(
+            "Access services directly with kubectl port-forward:", extra={"namespace": namespace}
+        )
         for service in config["services"]:
             local_port = service["port"] + PORT_FORWARD_OFFSET
             logger.info(
-                f"  kubectl port-forward -n {namespace} svc/{service['name']} {local_port}:{service['port']}"
+                f"  kubectl port-forward -n {namespace} svc/{service['name']} {local_port}:{service['port']}",
+                extra={
+                    "namespace": namespace,
+                    "service": service["name"],
+                    "local_port": local_port,
+                    "service_port": service["port"],
+                },
             )
 
         # Post/update GitHub comment if integration is enabled
@@ -246,24 +334,49 @@ def create_environment(
 
             except GitHubError as e:
                 # GitHub integration is optional
-                logger.warning(f"Failed to post GitHub comment: {e}")
+                logger.warning(
+                    f"Failed to post GitHub comment: {e}",
+                    extra={"pr_number": pr_number, "error": str(e)},
+                )
+
+        total_duration = time.perf_counter() - start_time
+
+        logger.info(
+            "Environment created successfully",
+            extra={
+                "namespace": namespace,
+                "service_count": len(config["services"]),
+                "ingresses_created": len(ingress_deployment_times),
+                "total_duration_seconds": round(total_duration, 3),
+                "avg_service_duration_seconds": (
+                    round(sum(service_deployment_times) / len(service_deployment_times), 3)
+                    if service_deployment_times
+                    else 0
+                ),
+                "avg_ingress_duration_seconds": (
+                    round(sum(ingress_deployment_times) / len(ingress_deployment_times), 3)
+                    if ingress_deployment_times
+                    else 0
+                ),
+            },
+        )
 
         return True
 
     except ConfigError as e:
-        logger.error(str(e))
+        logger.error(str(e), extra={"namespace": namespace, "error_type": "ConfigError"})
         return False
     except ValidationError as e:
-        logger.error(str(e))
+        logger.error(str(e), extra={"namespace": namespace, "error_type": "ValidationError"})
         return False
     except TemplateError as e:
-        logger.error(str(e))
+        logger.error(str(e), extra={"namespace": namespace, "error_type": "TemplateError"})
         return False
     except KubernetesError as e:
-        logger.error(str(e))
+        logger.error(str(e), extra={"namespace": namespace, "error_type": "KubernetesError"})
         return False
     except Exception as e:
-        logger.error(str(e))
+        logger.error(str(e), extra={"namespace": namespace, "error_type": type(e).__name__})
         return False
 
 
@@ -293,13 +406,13 @@ def delete_environment(k8s: KubernetesClient, namespace: str) -> bool:
         return True
 
     except ValidationError as e:
-        logger.error(str(e))
+        logger.error(str(e), extra={"namespace": namespace, "error_type": "ValidationError"})
         return False
     except KubernetesError as e:
-        logger.error(str(e))
+        logger.error(str(e), extra={"namespace": namespace, "error_type": "KubernetesError"})
         return False
     except Exception as e:
-        logger.error(str(e))
+        logger.error(str(e), extra={"namespace": namespace, "error_type": type(e).__name__})
         return False
 
 

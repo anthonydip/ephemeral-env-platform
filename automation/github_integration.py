@@ -6,6 +6,8 @@ Posts Github comment to PR to display the preview environment URL for viewing.
 
 from __future__ import annotations
 
+import time
+
 from github import Auth, Github, GithubException
 
 from automation.constants import PREVIEW_READY_MARKER
@@ -32,9 +34,12 @@ class GithubClient:
             auth = Auth.Token(token)
             self.client = Github(auth=auth)
             self.repo = self.client.get_repo(repo_name)
-            logger.info(f"GitHub client initialized for {repo_name} successfully")
+            logger.info(
+                f"GitHub client initialized for {repo_name} successfully",
+                extra={"repo": repo_name},
+            )
         except Exception as e:
-            logger.critical(f"Failed to initialize GitHub client: {e}")
+            logger.critical(f"Failed to initialize GitHub client: {e}", extra={"error": str(e)})
             raise
 
     def post_comment(self, pr_number: int, message: str) -> None:
@@ -48,12 +53,21 @@ class GithubClient:
         Raises:
             GitHubError: If comment posting fails
         """
+        start_time = time.perf_counter()
+
         try:
             pr = self.repo.get_pull(pr_number)
             comment = pr.create_issue_comment(message)
+
+            duration = time.perf_counter() - start_time
+
             logger.info(
                 f"Posted comment {comment.id} to PR #{pr_number}",
-                extra={"pr_number": pr_number, "comment_id": comment.id},
+                extra={
+                    "pr_number": pr_number,
+                    "comment_id": comment.id,
+                    "duration_seconds": round(duration, 3),
+                },
             )
         except GithubException as e:
             raise GitHubError(f"Failed to post comment to PR #{pr_number}: {e}") from e
@@ -86,7 +100,9 @@ class GithubClient:
                     )
                     return comment.id
 
-            logger.info(f"No existing bot comment found on PR #{pr_number}")
+            logger.info(
+                f"No existing bot comment found on PR #{pr_number}", extra={"pr_number": pr_number}
+            )
             return None
         except GithubException as e:
             raise GitHubError(f"Failed to search for bot comment on PR #{pr_number}: {e}") from e

@@ -169,5 +169,5 @@ LOG_LEVEL = "LOG_LEVEL"
 # Log file path
 LOG_FILE = "LOG_FILE"
 
-# EC2 public IP
-EC2_PUBLIC_IP = "EC2_PUBLIC_IP"
+# Ingress host public IP
+HOST_PUBLIC_IP = "HOST_PUBLIC_IP"

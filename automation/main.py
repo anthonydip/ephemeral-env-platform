@@ -20,10 +20,10 @@ from automation.constants import (
     DEFAULT_LOG_FORMAT,
     DEFAULT_LOG_LEVEL,
     DEFAULT_TEMPLATE_DIR,
-    EC2_PUBLIC_IP,
     GITHUB_REPO,
     GITHUB_RUN_ID,
     GITHUB_TOKEN,
+    HOST_PUBLIC_IP,
     LOG_FILE,
     LOG_LEVEL,
     NAMESPACE_PREFIX,
@@ -279,12 +279,12 @@ def create_environment(
                     },
                 )
 
-        ec2_ip = os.getenv(EC2_PUBLIC_IP, "<EC2-IP>")
+        host_ip = os.getenv(HOST_PUBLIC_IP, "<HOST-IP>")
 
         if ingress_created:
             logger.info(
-                f"Preview environment accessible at: http://{ec2_ip}/{namespace}/",
-                extra={"namespace": namespace, "url": f"http://{ec2_ip}/{namespace}/"},
+                f"Preview environment accessible at: http://{host_ip}/{namespace}/",
+                extra={"namespace": namespace, "url": f"http://{host_ip}/{namespace}/"},
             )
         else:
             logger.info(
@@ -317,7 +317,7 @@ def create_environment(
                 for service in config["services"]:
                     if service.get("ingress", {}).get("enabled", False):
                         service_path = service["ingress"].get("path", "/")
-                        service_url = f"http://{ec2_ip}/{namespace}{service_path}"
+                        service_url = f"http://{host_ip}/{namespace}{service_path}"
                         service_links.append(f"**{service['name'].title()}:** {service_url}")
 
                 links_text = "\n".join(service_links)

@@ -35,7 +35,7 @@ jobs:
           LOG_FILE: ""
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
-          EC2_PUBLIC_IP: ${{ secrets.EC2_PUBLIC_IP }}
+          HOST_PUBLIC_IP: ${{ secrets.HOST_PUBLIC_IP }}
         run: |
           python automation/main.py create $PR_NUMBER
 

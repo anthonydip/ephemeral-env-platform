@@ -10,6 +10,7 @@ import argparse
 import os
 import sys
 import time
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -19,7 +20,6 @@ from automation.constants import (
     DEFAULT_LOG_FILE,
     DEFAULT_LOG_FORMAT,
     DEFAULT_LOG_LEVEL,
-    DEFAULT_TEMPLATE_DIR,
     GITHUB_REPO,
     GITHUB_RUN_ID,
     GITHUB_TOKEN,
@@ -29,6 +29,7 @@ from automation.constants import (
     NAMESPACE_PREFIX,
     PORT_FORWARD_OFFSET,
     PREVIEW_READY_MARKER,
+    REQUIRED_TEMPLATES,
     STRIPPREFIX_MIDDLEWARE,
 )
 from automation.context import set_operation_id
@@ -42,6 +43,90 @@ from automation.exceptions import (
 from automation.github_integration import GithubClient
 from automation.k8s_client import KubernetesClient
 from automation.logger import get_logger, setup_logging
+
+# Get bundled templates location
+PACKAGE_DIR = Path(__file__).parent
+BUNDLED_TEMPLATES = PACKAGE_DIR / "templates"
+
+
+def get_template_directory(user_provided_path: str | None = None) -> Path:
+    """
+    Get the template directory to use.
+
+    Args:
+        user_provided_path: Optional path provided via --templates flag.
+                            Empty string or None will use bundled templates.
+
+    Returns:
+        Path object to template directory
+
+    Raises:
+        SystemExit: If template directory doesn't exist or is missing required templates
+    """
+    logger = get_logger(__name__)
+
+    # Use bundled templates
+    if not user_provided_path:
+        if not BUNDLED_TEMPLATES.exists():
+            logger.critical(
+                f"Bundled templates not found at: {BUNDLED_TEMPLATES}",
+                extra={"template_path": str(BUNDLED_TEMPLATES)},
+            )
+            sys.exit(1)
+
+        logger.info(
+            f"Using bundled templates from: {BUNDLED_TEMPLATES}",
+            extra={"template_source": "bundled", "template_path": str(BUNDLED_TEMPLATES)},
+        )
+        return BUNDLED_TEMPLATES
+
+    # Use custom templates
+    template_path = Path(user_provided_path)
+    if not template_path.exists():
+        logger.error(
+            f"Custom template directory not found: {template_path}",
+            extra={"template_source": "custom", "template_path": str(template_path)},
+        )
+        sys.exit(1)
+
+    logger.info(
+        f"Using custom templates from: {template_path}",
+        extra={"template_source": "custom", "template_path": str(template_path)},
+    )
+    return template_path
+
+
+def validate_templates(template_dir: Path) -> bool:
+    """
+    Verify that all required template files exist.
+
+    Args:
+        template_dir: Path to template directory
+
+    Returns:
+        True if all templates exist, False otherwise
+    """
+    logger = get_logger(__name__)
+
+    missing_templates = []
+    for template_file in REQUIRED_TEMPLATES:
+        if not (template_dir / template_file).exists():
+            missing_templates.append(template_file)
+
+    if missing_templates:
+        logger.error(
+            f"Missing required templates in {template_dir}",
+            extra={"template_dir": str(template_dir), "missing_templates": missing_templates},
+        )
+        for tmpl in missing_templates:
+            logger.error(f" - {tmpl}")
+        return False
+
+    logger.debug(
+        "All required templates found",
+        extra={"template_dir": str(template_dir), "template_count": len(REQUIRED_TEMPLATES)},
+    )
+    return True
 
 
 def main() -> None:
@@ -63,8 +148,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--templates",
-        default=DEFAULT_TEMPLATE_DIR,
-        help=f"Path to templates directory (default: {DEFAULT_TEMPLATE_DIR})",
+        default=None,
+        help="Path to Jinja2 templates directory (default: use bundled templates)",
     )
     parser.add_argument(
         "--log-level",
@@ -103,6 +188,11 @@ def main() -> None:
     set_operation_id(github_run_id) if github_run_id else set_operation_id()
 
     logger = get_logger(__name__)
+
+    template_dir = get_template_directory(args.templates)
+
+    if not validate_templates(template_dir):
+        sys.exit(1)
 
     namespace = f"{NAMESPACE_PREFIX}{args.pr_number}"
 
@@ -144,7 +234,7 @@ def main() -> None:
     operation_start = time.perf_counter()
 
     if args.action == "create":
-        success = create_environment(k8s, namespace, args.config, args.templates, github)
+        success = create_environment(k8s, namespace, args.config, str(template_dir), github)
     elif args.action == "delete":
         success = delete_environment(k8s, namespace)
 

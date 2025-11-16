@@ -3,13 +3,20 @@ Tests for main.py orchestration functions
 """
 
 import sys
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 
 from automation.constants import GITHUB_REPO, GITHUB_RUN_ID, GITHUB_TOKEN, HOST_PUBLIC_IP, LOG_FILE
 from automation.exceptions import GitHubError, KubernetesError
-from automation.main import create_environment, delete_environment, main
+from automation.main import (
+    create_environment,
+    delete_environment,
+    get_template_directory,
+    main,
+    validate_templates,
+)
 
 
 @pytest.fixture
@@ -348,17 +355,109 @@ def test_delete_environment_failure(mock_k8s_client):
 
 
 # ============================================================================
+# TEMPLATE DIRECTORY AND VALIDATION TESTS
+# ============================================================================
+
+
+def test_get_template_directory_uses_bundled_when_none():
+    """Test get_template_directory returns bundled templates when no path provided."""
+    template_dir = get_template_directory(None)
+
+    assert template_dir == Path(__file__).parent.parent / "automation" / "templates"
+    assert template_dir.exists()
+
+
+def test_get_template_directory_uses_bundled_when_empty_string():
+    """Test get_template_directory returns bundled templates when empty string provided."""
+    template_dir = get_template_directory("")
+
+    assert template_dir == Path(__file__).parent.parent / "automation" / "templates"
+
+
+def test_get_template_directory_uses_custom_path_when_provided(tmp_path):
+    """Test get_template_directory returns custom path when valid path provided."""
+    custom_templates = tmp_path / "custom_templates"
+    custom_templates.mkdir()
+
+    template_dir = get_template_directory(str(custom_templates))
+
+    assert template_dir == custom_templates
+
+
+def test_get_template_directory_exits_when_custom_path_not_exists():
+    """Test get_template_directory exits with code 1 when custom path doesn't exist."""
+    with pytest.raises(SystemExit) as exc_info:
+        get_template_directory("/nonexistent/path")
+
+    assert exc_info.value.code == 1
+
+
+def test_get_template_directory_exits_when_bundled_not_exists(monkeypatch):
+    """Test get_template_directory exits with code 1 when bundled templates missing."""
+    import automation.main
+
+    original_bundled = automation.main.BUNDLED_TEMPLATES
+    monkeypatch.setattr(automation.main, "BUNDLED_TEMPLATES", Path("/nonexistent/bundled"))
+
+    try:
+        with pytest.raises(SystemExit) as exc_info:
+            get_template_directory(None)
+
+        assert exc_info.value.code == 1
+    finally:
+        monkeypatch.setattr(automation.main, "BUNDLED_TEMPLATES", original_bundled)
+
+
+def test_validate_templates_success(template_dir):
+    """Test validate_templates returns True when all required templates exist."""
+    result = validate_templates(Path(template_dir))
+
+    assert result is True
+
+
+def test_validate_templates_fails_with_missing_templates(tmp_path):
+    """Test validate_templates returns False when templates are missing."""
+    empty_dir = tmp_path / "empty"
+    empty_dir.mkdir()
+
+    result = validate_templates(empty_dir)
+
+    assert result is False
+
+
+def test_validate_templates_fails_with_partially_missing_templates(tmp_path):
+    """Test validate_templates returns False when some templates are missing."""
+    partial_dir = tmp_path / "partial"
+    partial_dir.mkdir()
+
+    (partial_dir / "deployment.yaml.j2").write_text("test")
+
+    result = validate_templates(partial_dir)
+
+    assert result is False
+
+
+# ============================================================================
 # MAIN CLI TESTS
 # ============================================================================
 
 
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
 @patch("automation.main.delete_environment")
 @patch("automation.main.GithubClient")
 @patch("automation.main.KubernetesClient")
 @patch("automation.main.setup_logging")
 @patch("automation.main.set_operation_id")
 def test_main_delete_action_success(
-    mock_set_op_id, mock_setup_logging, mock_k8s_cls, mock_gh_cls, mock_delete_env, monkeypatch
+    mock_set_op_id,
+    mock_setup_logging,
+    mock_k8s_cls,
+    mock_gh_cls,
+    mock_delete_env,
+    mock_get_template_dir,
+    mock_validate_templates,
+    monkeypatch,
 ):
     """Test main() with delete action executes successfully."""
     monkeypatch.setattr(sys, "argv", ["main.py", "delete", "123"])
@@ -366,6 +465,8 @@ def test_main_delete_action_success(
     mock_delete_env.return_value = True
     mock_k8s_instance = Mock()
     mock_k8s_cls.return_value = mock_k8s_instance
+    mock_get_template_dir.return_value = Path("automation/templates")
+    mock_validate_templates.return_value = True
 
     main()
 
@@ -373,13 +474,22 @@ def test_main_delete_action_success(
     mock_set_op_id.assert_called_once()
 
 
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
 @patch("automation.main.create_environment")
 @patch("automation.main.GithubClient")
 @patch("automation.main.KubernetesClient")
 @patch("automation.main.setup_logging")
 @patch("automation.main.set_operation_id")
 def test_main_create_action_success(
-    mock_set_op_id, mock_setup_logging, mock_k8s_cls, mock_gh_cls, mock_create_env, monkeypatch
+    mock_set_op_id,
+    mock_setup_logging,
+    mock_k8s_cls,
+    mock_gh_cls,
+    mock_create_env,
+    mock_get_template_dir,
+    mock_validate_templates,
+    monkeypatch,
 ):
     """Test main() with create action executes successfully."""
     monkeypatch.setattr(sys, "argv", ["main.py", "create", "456"])
@@ -387,22 +497,33 @@ def test_main_create_action_success(
     mock_create_env.return_value = True
     mock_k8s_instance = Mock()
     mock_k8s_cls.return_value = mock_k8s_instance
+    mock_get_template_dir.return_value = Path("automation/templates")
+    mock_validate_templates.return_value = True
 
     main()
 
     assert mock_create_env.call_count == 1
     call_args = mock_create_env.call_args
-    assert call_args[0][0] == mock_k8s_instance  # k8s client
-    assert call_args[0][1] == "pr-456"  # namespace
+    assert call_args[0][0] == mock_k8s_instance
+    assert call_args[0][1] == "pr-456"
 
 
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
 @patch("automation.main.create_environment")
 @patch("automation.main.GithubClient")
 @patch("automation.main.KubernetesClient")
 @patch("automation.main.setup_logging")
 @patch("automation.main.set_operation_id")
 def test_main_with_skip_github_flag(
-    mock_set_op_id, mock_setup_logging, mock_k8s_cls, mock_gh_cls, mock_create_env, monkeypatch
+    mock_set_op_id,
+    mock_setup_logging,
+    mock_k8s_cls,
+    mock_gh_cls,
+    mock_create_env,
+    mock_get_template_dir,
+    mock_validate_templates,
+    monkeypatch,
 ):
     """Test --skip-github flag prevents GitHub client initialization."""
     monkeypatch.setattr(sys, "argv", ["main.py", "create", "789", "--skip-github"])
@@ -411,24 +532,33 @@ def test_main_with_skip_github_flag(
 
     mock_create_env.return_value = True
     mock_k8s_cls.return_value = Mock()
+    mock_get_template_dir.return_value = Path("automation/templates")
+    mock_validate_templates.return_value = True
 
     main()
 
-    # GitHub client should not be initialized
     mock_gh_cls.assert_not_called()
 
-    # create_environment should be called with github=None
     call_args = mock_create_env.call_args
-    assert call_args[0][4] is None  # github parameter
+    assert call_args[0][4] is None
 
 
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
 @patch("automation.main.create_environment")
 @patch("automation.main.GithubClient")
 @patch("automation.main.KubernetesClient")
 @patch("automation.main.setup_logging")
 @patch("automation.main.set_operation_id")
 def test_main_github_client_initialized_with_credentials(
-    mock_set_op_id, mock_setup_logging, mock_k8s_cls, mock_gh_cls, mock_create_env, monkeypatch
+    mock_set_op_id,
+    mock_setup_logging,
+    mock_k8s_cls,
+    mock_gh_cls,
+    mock_create_env,
+    mock_get_template_dir,
+    mock_validate_templates,
+    monkeypatch,
 ):
     """Test GitHub client is initialized when credentials are provided."""
     monkeypatch.setattr(sys, "argv", ["main.py", "create", "999"])
@@ -439,16 +569,19 @@ def test_main_github_client_initialized_with_credentials(
     mock_k8s_cls.return_value = Mock()
     mock_gh_instance = Mock()
     mock_gh_cls.return_value = mock_gh_instance
+    mock_get_template_dir.return_value = Path("automation/templates")
+    mock_validate_templates.return_value = True
 
     main()
 
     mock_gh_cls.assert_called_once_with(token="test-token", repo_name="test-owner/test-repo")
 
-    # create_environment should be called with the GitHub client
     call_args = mock_create_env.call_args
     assert call_args[0][4] == mock_gh_instance
 
 
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
 @patch("automation.main.load_dotenv")
 @patch("automation.main.create_environment")
 @patch("automation.main.GithubClient")
@@ -462,6 +595,8 @@ def test_main_github_client_not_initialized_without_token(
     mock_gh_cls,
     mock_create_env,
     mock_load_dotenv,
+    mock_get_template_dir,
+    mock_validate_templates,
     monkeypatch,
 ):
     """Test GitHub client is not initialized when token is missing."""
@@ -471,6 +606,8 @@ def test_main_github_client_not_initialized_without_token(
 
     mock_create_env.return_value = True
     mock_k8s_cls.return_value = Mock()
+    mock_get_template_dir.return_value = Path("automation/templates")
+    mock_validate_templates.return_value = True
 
     main()
 
@@ -480,6 +617,8 @@ def test_main_github_client_not_initialized_without_token(
     assert call_args[0][4] is None
 
 
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
 @patch("automation.main.load_dotenv")
 @patch("automation.main.create_environment")
 @patch("automation.main.GithubClient")
@@ -493,6 +632,8 @@ def test_main_github_client_not_initialized_without_repo(
     mock_gh_cls,
     mock_create_env,
     mock_load_dotenv,
+    mock_get_template_dir,
+    mock_validate_templates,
     monkeypatch,
 ):
     """Test GitHub client is not initialized when repo is missing."""
@@ -502,6 +643,8 @@ def test_main_github_client_not_initialized_without_repo(
 
     mock_create_env.return_value = True
     mock_k8s_cls.return_value = Mock()
+    mock_get_template_dir.return_value = Path("automation/templates")
+    mock_validate_templates.return_value = True
 
     main()
 
@@ -511,13 +654,22 @@ def test_main_github_client_not_initialized_without_repo(
     assert call_args[0][4] is None
 
 
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
 @patch("automation.main.create_environment")
 @patch("automation.main.GithubClient")
 @patch("automation.main.KubernetesClient")
 @patch("automation.main.setup_logging")
 @patch("automation.main.set_operation_id")
 def test_main_github_run_id_sets_operation_id(
-    mock_set_op_id, mock_setup_logging, mock_k8s_cls, mock_gh_cls, mock_create_env, monkeypatch
+    mock_set_op_id,
+    mock_setup_logging,
+    mock_k8s_cls,
+    mock_gh_cls,
+    mock_create_env,
+    mock_get_template_dir,
+    mock_validate_templates,
+    monkeypatch,
 ):
     """Test GITHUB_RUN_ID environment variable is used for operation ID."""
     monkeypatch.setattr(sys, "argv", ["main.py", "create", "333"])
@@ -525,19 +677,30 @@ def test_main_github_run_id_sets_operation_id(
 
     mock_create_env.return_value = True
     mock_k8s_cls.return_value = Mock()
+    mock_get_template_dir.return_value = Path("automation/templates")
+    mock_validate_templates.return_value = True
 
     main()
 
     mock_set_op_id.assert_called_once_with("12345678")
 
 
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
 @patch("automation.main.create_environment")
 @patch("automation.main.GithubClient")
 @patch("automation.main.KubernetesClient")
 @patch("automation.main.setup_logging")
 @patch("automation.main.set_operation_id")
 def test_main_no_github_run_id_sets_random_operation_id(
-    mock_set_op_id, mock_setup_logging, mock_k8s_cls, mock_gh_cls, mock_create_env, monkeypatch
+    mock_set_op_id,
+    mock_setup_logging,
+    mock_k8s_cls,
+    mock_gh_cls,
+    mock_create_env,
+    mock_get_template_dir,
+    mock_validate_templates,
+    monkeypatch,
 ):
     """Test operation ID is generated when GITHUB_RUN_ID is not set."""
     monkeypatch.setattr(sys, "argv", ["main.py", "create", "444"])
@@ -545,26 +708,38 @@ def test_main_no_github_run_id_sets_random_operation_id(
 
     mock_create_env.return_value = True
     mock_k8s_cls.return_value = Mock()
+    mock_get_template_dir.return_value = Path("automation/templates")
+    mock_validate_templates.return_value = True
 
     main()
 
-    # Should be called without arguments
     mock_set_op_id.assert_called_once_with()
 
 
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
 @patch("automation.main.delete_environment")
 @patch("automation.main.GithubClient")
 @patch("automation.main.KubernetesClient")
 @patch("automation.main.setup_logging")
 @patch("automation.main.set_operation_id")
 def test_main_exits_on_operation_failure(
-    mock_set_op_id, mock_setup_logging, mock_k8s_cls, mock_gh_cls, mock_delete_env, monkeypatch
+    mock_set_op_id,
+    mock_setup_logging,
+    mock_k8s_cls,
+    mock_gh_cls,
+    mock_delete_env,
+    mock_get_template_dir,
+    mock_validate_templates,
+    monkeypatch,
 ):
     """Test main() exits with code 1 when operation fails."""
     monkeypatch.setattr(sys, "argv", ["main.py", "delete", "555"])
 
     mock_delete_env.return_value = False
     mock_k8s_cls.return_value = Mock()
+    mock_get_template_dir.return_value = Path("automation/templates")
+    mock_validate_templates.return_value = True
 
     with pytest.raises(SystemExit) as exc_info:
         main()
@@ -572,18 +747,29 @@ def test_main_exits_on_operation_failure(
     assert exc_info.value.code == 1
 
 
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
 @patch("automation.main.create_environment")
 @patch("automation.main.GithubClient")
 @patch("automation.main.KubernetesClient")
 @patch("automation.main.setup_logging")
 @patch("automation.main.set_operation_id")
 def test_main_exits_on_kubernetes_client_failure(
-    mock_set_op_id, mock_setup_logging, mock_k8s_cls, mock_gh_cls, mock_create_env, monkeypatch
+    mock_set_op_id,
+    mock_setup_logging,
+    mock_k8s_cls,
+    mock_gh_cls,
+    mock_create_env,
+    mock_get_template_dir,
+    mock_validate_templates,
+    monkeypatch,
 ):
     """Test main() exits with code 1 when Kubernetes client initialization fails."""
     monkeypatch.setattr(sys, "argv", ["main.py", "create", "666"])
 
     mock_k8s_cls.side_effect = Exception("K8s initialization failed")
+    mock_get_template_dir.return_value = Path("automation/templates")
+    mock_validate_templates.return_value = True
 
     with pytest.raises(SystemExit) as exc_info:
         main()
@@ -592,13 +778,22 @@ def test_main_exits_on_kubernetes_client_failure(
     mock_create_env.assert_not_called()
 
 
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
 @patch("automation.main.create_environment")
 @patch("automation.main.GithubClient")
 @patch("automation.main.KubernetesClient")
 @patch("automation.main.setup_logging")
 @patch("automation.main.set_operation_id")
 def test_main_custom_config_and_template_paths(
-    mock_set_op_id, mock_setup_logging, mock_k8s_cls, mock_gh_cls, mock_create_env, monkeypatch
+    mock_set_op_id,
+    mock_setup_logging,
+    mock_k8s_cls,
+    mock_gh_cls,
+    mock_create_env,
+    mock_get_template_dir,
+    mock_validate_templates,
+    monkeypatch,
 ):
     """Test custom --config and --templates arguments are passed correctly."""
     monkeypatch.setattr(
@@ -617,27 +812,43 @@ def test_main_custom_config_and_template_paths(
 
     mock_create_env.return_value = True
     mock_k8s_cls.return_value = Mock()
+    mock_get_template_dir.return_value = Path("/custom/templates")
+    mock_validate_templates.return_value = True
 
     main()
 
+    mock_get_template_dir.assert_called_once_with("/custom/templates")
+    mock_validate_templates.assert_called_once_with(Path("/custom/templates"))
+
     call_args = mock_create_env.call_args
-    assert call_args[0][2] == "/custom/config.yaml"  # config_path
-    assert call_args[0][3] == "/custom/templates"  # template_dir
+    assert call_args[0][2] == "/custom/config.yaml"
+    assert call_args[0][3] == str(mock_get_template_dir.return_value)
 
 
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
 @patch("automation.main.create_environment")
 @patch("automation.main.GithubClient")
 @patch("automation.main.KubernetesClient")
 @patch("automation.main.setup_logging")
 @patch("automation.main.set_operation_id")
 def test_main_log_level_from_argument(
-    mock_set_op_id, mock_setup_logging, mock_k8s_cls, mock_gh_cls, mock_create_env, monkeypatch
+    mock_set_op_id,
+    mock_setup_logging,
+    mock_k8s_cls,
+    mock_gh_cls,
+    mock_create_env,
+    mock_get_template_dir,
+    mock_validate_templates,
+    monkeypatch,
 ):
     """Test --log-level argument configures logging correctly."""
     monkeypatch.setattr(sys, "argv", ["main.py", "create", "888", "--log-level", "DEBUG"])
 
     mock_create_env.return_value = True
     mock_k8s_cls.return_value = Mock()
+    mock_get_template_dir.return_value = Path("automation/templates")
+    mock_validate_templates.return_value = True
 
     main()
 
@@ -645,19 +856,30 @@ def test_main_log_level_from_argument(
     assert call_args[1]["level"] == "DEBUG"
 
 
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
 @patch("automation.main.create_environment")
 @patch("automation.main.GithubClient")
 @patch("automation.main.KubernetesClient")
 @patch("automation.main.setup_logging")
 @patch("automation.main.set_operation_id")
 def test_main_log_format_from_argument(
-    mock_set_op_id, mock_setup_logging, mock_k8s_cls, mock_gh_cls, mock_create_env, monkeypatch
+    mock_set_op_id,
+    mock_setup_logging,
+    mock_k8s_cls,
+    mock_gh_cls,
+    mock_create_env,
+    mock_get_template_dir,
+    mock_validate_templates,
+    monkeypatch,
 ):
     """Test --log-format argument configures logging correctly."""
     monkeypatch.setattr(sys, "argv", ["main.py", "create", "900", "--log-format", "json"])
 
     mock_create_env.return_value = True
     mock_k8s_cls.return_value = Mock()
+    mock_get_template_dir.return_value = Path("automation/templates")
+    mock_validate_templates.return_value = True
 
     main()
 
@@ -665,13 +887,22 @@ def test_main_log_format_from_argument(
     assert call_args[1]["log_format"] == "json"
 
 
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
 @patch("automation.main.create_environment")
 @patch("automation.main.GithubClient")
 @patch("automation.main.KubernetesClient")
 @patch("automation.main.setup_logging")
 @patch("automation.main.set_operation_id")
 def test_main_log_file_from_environment_variable(
-    mock_set_op_id, mock_setup_logging, mock_k8s_cls, mock_gh_cls, mock_create_env, monkeypatch
+    mock_set_op_id,
+    mock_setup_logging,
+    mock_k8s_cls,
+    mock_gh_cls,
+    mock_create_env,
+    mock_get_template_dir,
+    mock_validate_templates,
+    monkeypatch,
 ):
     """Test LOG_FILE environment variable sets log file path."""
     monkeypatch.setattr(sys, "argv", ["main.py", "create", "1001"])
@@ -679,6 +910,8 @@ def test_main_log_file_from_environment_variable(
 
     mock_create_env.return_value = True
     mock_k8s_cls.return_value = Mock()
+    mock_get_template_dir.return_value = Path("automation/templates")
+    mock_validate_templates.return_value = True
 
     main()
 
@@ -686,13 +919,22 @@ def test_main_log_file_from_environment_variable(
     assert call_args[1]["log_file"] == "/custom/log/path.log"
 
 
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
 @patch("automation.main.create_environment")
 @patch("automation.main.GithubClient")
 @patch("automation.main.KubernetesClient")
 @patch("automation.main.setup_logging")
 @patch("automation.main.set_operation_id")
 def test_main_log_file_empty_string_disables_file_logging(
-    mock_set_op_id, mock_setup_logging, mock_k8s_cls, mock_gh_cls, mock_create_env, monkeypatch
+    mock_set_op_id,
+    mock_setup_logging,
+    mock_k8s_cls,
+    mock_gh_cls,
+    mock_create_env,
+    mock_get_template_dir,
+    mock_validate_templates,
+    monkeypatch,
 ):
     """Test LOG_FILE empty string disables file logging."""
     monkeypatch.setattr(sys, "argv", ["main.py", "create", "1002"])
@@ -700,6 +942,8 @@ def test_main_log_file_empty_string_disables_file_logging(
 
     mock_create_env.return_value = True
     mock_k8s_cls.return_value = Mock()
+    mock_get_template_dir.return_value = Path("automation/templates")
+    mock_validate_templates.return_value = True
 
     main()
 
@@ -707,13 +951,22 @@ def test_main_log_file_empty_string_disables_file_logging(
     assert call_args[1]["log_file"] is None
 
 
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
 @patch("automation.main.create_environment")
 @patch("automation.main.GithubClient")
 @patch("automation.main.KubernetesClient")
 @patch("automation.main.setup_logging")
 @patch("automation.main.set_operation_id")
 def test_main_github_client_exception_handled_gracefully(
-    mock_set_op_id, mock_setup_logging, mock_k8s_cls, mock_gh_cls, mock_create_env, monkeypatch
+    mock_set_op_id,
+    mock_setup_logging,
+    mock_k8s_cls,
+    mock_gh_cls,
+    mock_create_env,
+    mock_get_template_dir,
+    mock_validate_templates,
+    monkeypatch,
 ):
     """Test GitHub client initialization exceptions are handled gracefully."""
     monkeypatch.setattr(sys, "argv", ["main.py", "create", "1003"])
@@ -723,9 +976,41 @@ def test_main_github_client_exception_handled_gracefully(
     mock_create_env.return_value = True
     mock_k8s_cls.return_value = Mock()
     mock_gh_cls.side_effect = Exception("GitHub API error")
+    mock_get_template_dir.return_value = Path("automation/templates")
+    mock_validate_templates.return_value = True
 
-    # Should not raise, should continue with github=None
     main()
 
     call_args = mock_create_env.call_args
-    assert call_args[0][4] is None  # github should be None
+    assert call_args[0][4] is None
+
+
+@patch("automation.main.validate_templates")
+@patch("automation.main.get_template_directory")
+@patch("automation.main.create_environment")
+@patch("automation.main.GithubClient")
+@patch("automation.main.KubernetesClient")
+@patch("automation.main.setup_logging")
+@patch("automation.main.set_operation_id")
+def test_main_exits_when_template_validation_fails(
+    mock_set_op_id,
+    mock_setup_logging,
+    mock_k8s_cls,
+    mock_gh_cls,
+    mock_create_env,
+    mock_get_template_dir,
+    mock_validate_templates,
+    monkeypatch,
+):
+    """Test main() exits with code 1 when template validation fails."""
+    monkeypatch.setattr(sys, "argv", ["main.py", "create", "123"])
+
+    mock_k8s_cls.return_value = Mock()
+    mock_get_template_dir.return_value = Path("/some/path")
+    mock_validate_templates.return_value = False
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 1
+    mock_create_env.assert_not_called()

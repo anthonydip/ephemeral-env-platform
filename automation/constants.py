@@ -34,6 +34,9 @@ MIDDLEWARE_TEMPLATE = "middleware.yaml.j2"
 # Ingress template file name
 INGRESS_TEMPLATE = "ingress.yaml.j2"
 
+# Required templates
+REQUIRED_TEMPLATES = [DEPLOYMENT_TEMPLATE, SERVICE_TEMPLATE, MIDDLEWARE_TEMPLATE, INGRESS_TEMPLATE]
+
 # ============================================================================
 # Kubernetes Validation Limits
 # ============================================================================

@@ -1,0 +1,13 @@
+services:
+  - name: api
+    image: mycompany/api:{{PR_NUMBER}}
+    port: 8080
+    ingress:
+      enabled: true
+      path: "/"
+    env:
+      DATABASE_URL: postgresql://db.example.com:5432/production
+      REDIS_URL: redis://cache.example.com:6379
+      API_KEY: your-api-key-here
+      LOG_LEVEL: info
+      CORS_ORIGIN: "*"

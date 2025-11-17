@@ -1,0 +1,44 @@
+services:
+  - name: frontend
+    image: mycompany/frontend:{{PR_NUMBER}}
+    port: 80
+    ingress:
+      enabled: true
+      path: "/"
+
+  - name: auth-service
+    image: mycompany/auth:{{PR_NUMBER}}
+    port: 3001
+    ingress:
+      enabled: true
+      path: "/auth"
+    env:
+      JWT_SECRET: your-secret-key
+      TOKEN_EXPIRY: "3600"
+
+  - name: user-service
+    image: mycompany/users:{{PR_NUMBER}}
+    port: 3002
+    ingress:
+      enabled: true
+      path: "/users"
+    env:
+      DATABASE_URL: postgresql://postgres:password@user-db:5432/users
+
+  - name: order-service
+    image: mycompany/orders:{{PR_NUMBER}}
+    port: 3003
+    ingress:
+      enabled: true
+      path: "/orders"
+    env:
+      DATABASE_URL: postgresql://postgres:password@order-db:5432/orders
+      PAYMENT_API_URL: http://payment-service:3004
+
+  - name: payment-service
+    image: mycompany/payments:{{PR_NUMBER}}
+    port: 3004
+    ingress:
+      enabled: false
+    env:
+      STRIPE_KEY: sk_test_example

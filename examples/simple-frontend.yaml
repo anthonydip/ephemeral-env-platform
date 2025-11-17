@@ -1,0 +1,7 @@
+services:
+  - name: frontend
+    image: mycompany/frontend:{{PR_NUMBER}}
+    port: 80
+    ingress:
+      enabled: true
+      path: "/"
